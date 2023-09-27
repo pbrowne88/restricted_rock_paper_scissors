@@ -1,0 +1,6 @@
+{
+    "solidity.remappings": [
+        "@openzeppelin/=/Users/pierson/node_modules/@openzeppelin"
+    ],
+    "solidity.defaultCompiler": "localFile"
+}
