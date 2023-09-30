@@ -1,5 +1,5 @@
-const RRPS = artifacts.require("RRPS");
+const rrps = artifacts.require("rrps");
 
 module.exports = function(deployer) {
-    deployer.deploy(RRPS);
+    deployer.deploy(rrps);
 }

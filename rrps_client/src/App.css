@@ -1,38 +1,56 @@
+/* App.css */
+
+/* Styles for the overall app container */
 .App {
   text-align: center;
+  background-color: #282c36;
+  color: #ffffff;
+  padding: 20px;
+  font-family: Arial, sans-serif;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+/* Styles for the header */
+h1 {
+  font-size: 2.5rem;
+  color: #61dafb; /* A bright accent color for the header */
+  margin-bottom: 20px;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
+/* Styles for the choice buttons */
+.choice-button {
+  background-color: #22839e;
+  color: #ffffff;
+  font-size: 1.5rem;
+  padding: 10px 20px;
+  margin: 10px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.choice-button:hover {
+  background-color: #45aaf2; /* Slightly darker color on hover */
+}
+
+/* Styles for the result container */
+.result {
+  margin-top: 20px;
+  font-size: 1.2rem;
+}
+
+/* Styles for individual game results */
+.result p {
+  margin: 5px 0;
+}
+
+/* Media query for smaller screens */
+@media (max-width: 600px) {
+  h1 {
+    font-size: 2rem;
   }
-}
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
-}
-
-.App-link {
-  color: #61dafb;
-}
-
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
+  .choice-button {
+    font-size: 1.2rem;
   }
 }
