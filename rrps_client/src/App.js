@@ -4,7 +4,7 @@ import Select from 'react-select';
 import './App.css';
 import Web3 from 'web3';
 
-const abi = require('./rrps_abi.json');
+const abi = require('./RRPS.json').abi;
 
 function App() {
 
@@ -14,7 +14,7 @@ function App() {
   const Ganache = new Web3("HTTP://127.0.0.1:7545");
   const accounts = Ganache.eth.getAccounts();
 
-  const contract = new Ganache.eth.Contract(abi, '0xed25FB4521fF53282b8541A217E7fa7f93c4A9C1');
+  const contract = new Ganache.eth.Contract(abi, '0xEc2226e1a33b4dB2ac8811051F2F7d3Fe0faA232');
 
   async function interact(){
     const providersAccounts = await Ganache.eth.getAccounts();
@@ -23,7 +23,7 @@ function App() {
     const player3 = providersAccounts[2];
 
     try{
-      await contract.methods.startGame('Player2').send({
+      await contract.methods.startGame().send({
         from: player2,
         gas: 1000000,
       });
@@ -32,8 +32,18 @@ function App() {
       console.error(error);
     }
 
-
+    contract.getPastEvents('PlayerHasJoined')
+    .then(function(events) {
+      // Process the retrieved events
+      console.log(events);
+    })
+    .catch(function(error) {
+      // Handle errors
+      console.error(error);
+    });
   }
+
+
 
   const [stars, setStars] = useState(0);
   const [rock, setRock] = useState(0);
@@ -137,6 +147,60 @@ function App() {
     setResult(winner);
   };
 
+
+  const InventoryComponent = () => {
+    return (
+      <div className="result" style={{position: 'fixed', bottom: 5, left:5 }}>
+        {
+          <div className="result">
+            <h2>Your Inventory:</h2>
+            <p>Stars: {stars}</p>
+            <p>Rock: {rock}</p>
+            <p>Paper: {paper}</p>
+            <p>Scissors: {scissors}</p>
+            <button onClick={getBalance}>Update Inventory</button>
+          </div>
+        }
+      </div>
+    );
+  };
+
+  const TotalsComponent = () => {
+    return (
+      <div className="result" style={{position: 'fixed', bottom: 5, right:5 }}>
+        {
+          <div className="result">
+            <h2>Your Inventory:</h2>
+            <span>&nbsp;&nbsp;</span>
+            <p>Rock: {rock}</p>
+            <p>Paper: {paper}</p>
+            <p>Scissors: {scissors}</p>
+            <button onClick={getBalance}>Update Inventory</button>
+          </div>
+        }
+      </div>
+    );
+
+  };
+
+  const ResultsComponent = () => {
+    return(
+      <div className="result">
+        <p>You chose: {playerChoice}</p>
+        <p>Computer chose: {computerChoice}</p>
+        <p>{result}</p>
+        <span>&nbsp;&nbsp;</span>
+        <p>Total Player Wins: {playerWins}</p>
+        <p>Total Computer Wins (boo): {computerWins}</p>
+        <span>&nbsp;&nbsp;</span>
+        <span>&nbsp;&nbsp;</span>
+        <span>&nbsp;&nbsp;</span>
+        <button className="choice-button" onClick={interact}>SEND TRANSACTION</button>
+      </div>
+    )
+  };
+    
+
   return (
     <div className="App">
       <h1>Restricted Rock-Paper-Scissors</h1>
@@ -151,26 +215,9 @@ function App() {
           </button>
         ))}
       </div>
-        <div className="result">
-          <p>You chose: {playerChoice}</p>
-          <p>Computer chose: {computerChoice}</p>
-          <p>{result}</p>
-          <span>&nbsp;&nbsp;</span>
-          <p>Total Player Wins: {playerWins}</p>
-          <p>Total Computer Wins (boo): {computerWins}</p>
-          <span>&nbsp;&nbsp;</span>
-          <span>&nbsp;&nbsp;</span>
-          <span>&nbsp;&nbsp;</span>
-          <button className="choice-button" onClick={interact}>SEND TRANSACTION</button>
-        </div>
-        <div className="result">
-          <h2>Your Inventory:</h2>
-          <p>Stars: {stars}</p>
-          <p>Rock: {rock}</p>
-          <p>Paper: {paper}</p>
-          <p>Scissors: {scissors}</p>
-          <button onClick={getBalance}>Update Inventory</button>
-        </div>
+      <ResultsComponent />
+      <InventoryComponent />
+      <TotalsComponent />
     </div>
   );
 }

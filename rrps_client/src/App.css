@@ -16,6 +16,10 @@ h1 {
   margin-bottom: 20px;
 }
 
+body {
+  background-color: #282c36;
+}
+
 /* Styles for the choice buttons */
 .choice-button {
   background-color: #22839e;

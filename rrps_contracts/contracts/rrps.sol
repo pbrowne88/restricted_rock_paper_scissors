@@ -24,7 +24,7 @@ TODO LIST:
 
 
 contract RRPS is ERC1155, Ownable, BalanceCheckers {
-    constructor() ERC1155("") {}
+    constructor() ERC1155(emptyString) {}
 
     // Nested mapping allows rapid identification of who is challenging whom
     // TODO: REPLACE BOOL WITH HASH OR THE STRUCT??
@@ -40,152 +40,33 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
     mapping (address => mapping (address => commit)) challenges;
     mapping (address => uint) challengesCount;
 
-    function startGame(string memory nickname) public /* payable */ {
-        // Check payment
-        // require(msg.value >= 0.1 ether);
-        // Ensure that nickname is unique
-        require(nicknamesToAddresses[nickname] == address(0), "Nickname already exists");
-        // Ensure that address is not currently playing the game
-        require(players[msg.sender] == false, "Address is already playing.");
-        // Log the address as playing the game
-        players[msg.sender] = true; 
-        // Associate the nickname 
-        nicknamesToAddresses[nickname] = msg.sender;
-        addressesToNicknames[msg.sender] = nickname;
-        // nicknameList.push(nickname);
+    event PlayerHasJoined(address playerAddress); //, string nickname);
 
-        // Mint new set of cards
-        mint(msg.sender, ROCK, 4, "");
-        mint(msg.sender, PAPER, 4, "");
-        mint(msg.sender, SCISSORS, 4, "");
-        
-        // Mint new set of stars
-        mint(msg.sender, STAR, 3, "");
-    }
+    // error NicknameAlreadyExists();
+    error AddressAlreadyPlaying();
+    error PlayerNotFound();
+    error PlayerHasNoStars();
+    error PlayerHasNoCards();
+    error PlayerHasNoUncommittedCards();
+    error PlayerHasNoUncommittedStars();
+    error PlayerStillHasStars();
+    error PlayerStillHasCards();
+    error InsufficientStars();
+    // error NicknameNotFound();
+    error NoSelfChallenge();
+    error PlayerAlreadyChallenged();
+    error NotYetChallenged();
+    error MustBeRockPaperOrScissors();
+    error NeedCopyOfCard();
+    error NoOpenCommit();
+    error InvalidCardCombination();
 
+    event PlayerHasLeft(address playerAddress);//, string nickname);
+    event ChallengerFailedHashOnce(address challenger);//, string nickname);
+    event ChallengerFailedHashTwice(address challenger);//, string nickname);
 
-    function gameOverCheck(address player) internal {
-        //Check if player has no stars remaining
-        if (balanceOf(player, STAR) == 0){
-            // DOUBLE check!
-            require(balanceOf(player, STAR) == 0, "This player still has stars!");
-
-            //Burn remaining cards
-            _burn(player, ROCK, balanceOf(player, ROCK));
-            _burn(player, PAPER, balanceOf(player, PAPER));
-            _burn(player, SCISSORS, balanceOf(player, SCISSORS));
-
-            //De-register address and nickname
-            nicknamesToAddresses[addressesToNicknames[player]] = address(0);
-            addressesToNicknames[player] = "";
-            players[player] = false;
-        }
-    }
-
-    function cashOut() public {
-        // Check that player has no cards remaining
-        require(totalCards(msg.sender) < 1);
-        // Check that player has 3 or more stars remaining
-        require(balanceOf(msg.sender, STAR) > 2);
-
-        // TODO: Implement cashing out stars from the contract's account -- 0.03 Eth per star on a 0.1 Eth buyin?
-        // For now, just burn the remaining stars
-        _burn(msg.sender, STAR, balanceOf(msg.sender, STAR)); 
-
-        //De-register address and nickname
-        nicknamesToAddresses[addressesToNicknames[msg.sender]] = address(0);
-        addressesToNicknames[msg.sender] = "";
-        players[msg.sender] = false;
-    }
-
-
-
-    function challengeCommit(string memory challengeeNickname, bytes32 hash) public {
-        require(nicknamesToAddresses[challengeeNickname] != address(0), "That nickname isn't associated with an active player!");
-        challengeCommit(nicknamesToAddresses[challengeeNickname], hash);
-    }
-
-    // This function is written from the perspective of the challenger
-    function challengeCommit(address challengee, bytes32 hash) public {
-
-        // Check that player is in the game 
-        require(players[challengee]);
-
-        // Check that challenger and challengee are different accounts
-        require(msg.sender != challengee, "You cannot challenge yourself!");
-
-        // Check that challenger has at least one star and at least one card remaining
-        require(balanceOf(msg.sender, STAR) > 0, "Requires that you have at least one star.");
-        require(totalCards(msg.sender) > 0, "Requires that you have at least one card to challenge with.");
-
-        // Check that challengee has at least one star and at least one card remaining
-        require(balanceOf(challengee, STAR) > 0, "Requires that the challengee has at least one star.");
-        require(totalCards(challengee) > 0, "Requires that challengee has at least one card.");
-
-        // Check that challenger has at least one card and at least one star not already committed to a challenge
-        require((totalCards(msg.sender) - challengesCount[msg.sender]) > 0, "Requires that you have at least one uncommitted card to challenge with.");
-        require((balanceOf(msg.sender, STAR) - challengesCount[msg.sender]) > 0, "Requires that you have at least one uncommitted star to challenge with.");
-
-        // Check that challengee has at least one card and at least one star not already committed to a challenge
-        require((totalCards(challengee) - challengesCount[challengee]) > 0, "Requires that challengee has at least one uncommitted card.");
-        require((balanceOf(challengee, STAR) - challengesCount[challengee]) > 0, "Requires that challengee has at least one uncommitted star.");
-
-        // Check that challengee doesn't have an open challenge against challenger
-        require(challenges[challengee][msg.sender].exists == false, "Challengee already has an open challenge against you.");
-        // Check that challenger doesn't have an open challenge against challengee
-        require(challenges[msg.sender][challengee].exists == false, "You already have an open challenge against challengee.");
-
-        // Set challenges mapping challenger -> challengee -> cardType and increment challengeCount for challenger 
-        challenges[msg.sender][challengee].hash = hash;
-        challenges[msg.sender][challengee].exists = true;
-        challengesCount[msg.sender] += 1;
-        
-    }
-
-    event PlayerNotFound(address missingPlayer, string message);
-
-    function openCommit(string memory challengerNickname, uint cardType) public {
-        require(nicknamesToAddresses[challengerNickname] != address(0), "That nickname isn't associated with an active player!");
-        openCommit(nicknamesToAddresses[challengerNickname], cardType);
-    }
-
-    // This function is written from the perspective of the challengee
-    function openCommit(address challenger, uint cardType) public{
-
-        // Check that challengee has been challenged by challenger
-        require(challenges[challenger][msg.sender].exists);
-
-        // Check to see if challenger is still in the game. If they are not, withdraw the challenge and end function early
-        if (players[challenger] == false){
-            delete challenges[challenger][msg.sender];
-            emit PlayerNotFound(challenger, "Player not found! Removing challenge...");
-        }
-
-        // Check that cardType is one of ROCK (1), PAPER (2), SCISSORS (3)
-        require(cardType > 0 && cardType < 4, "cardType must be 1, 2, or 3 (corresponding to ROCK, PAPER, and SCISSORS, respectively.");
-
-        // Check that challenger and challengee are different accounts
-        require(msg.sender != challenger, "You cannot challenge yourself!");
-
-        // Check that challengee has at least one star and at least one card remaining
-        require(balanceOf(msg.sender, STAR) > 0, "Requires that you have at least one star.");
-        require(totalCards(msg.sender) > 0, "Requires that you have at least one card to challenge with.");
-
-        // Check that challengee has at least one card and at least one star not already committed to a challenge
-        require((totalCards(msg.sender) - challengesCount[msg.sender]) > 0, "Requires that you have at least one uncommitted card to challenge with.");
-        require((balanceOf(msg.sender, STAR) - challengesCount[msg.sender]) > 0, "Requires that you have at least one uncommitted star to challenge with.");
-
-        // Check that challengee has at least one copy of the card they're trying to commit
-        require(balanceOf(msg.sender, cardType) > 0, "Requires that you have at least one copy of the card you're trying to commit.");
-
-
-        // Set challenges mapping challengee -> challenger -> cardType
-        challenges[msg.sender][challenger].cardType = cardType;
-        challenges[msg.sender][challenger].exists = true;
-
-        // Increment challengeCount for challengee 
-        challengesCount[msg.sender] += 1;
-    }
+    bytes emptyData = "";
+    string emptyString = "";
 
     enum GameResult {
         Challenger_Loses,
@@ -196,30 +77,170 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
         Misplay_Challenger_Wins     // Result if the challengee doesn't possess a card of the type they committed
     }
 
-    function reveal(string memory challengeeNickname, uint cardType, string calldata salt) public {
-        require(nicknamesToAddresses[challengeeNickname] != address(0), "That nickname isn't associated with an active player!");
-        reveal(nicknamesToAddresses[challengeeNickname], cardType, salt);
+    function startGame() public {//string memory nickname) public /* payable */ {
+        // Check payment
+        // require(msg.value >= 0.1 ether);
+        // Ensure that nickname is unique
+        // if (nicknamesToAddresses[nickname] != address(0)) {revert NicknameAlreadyExists();}
+        // Ensure that address is not currently playing the game
+        if (players[msg.sender] == true) {revert AddressAlreadyPlaying();}
+        // Log the address as playing the game
+        players[msg.sender] = true; 
+        // Associate the nickname 
+        // nicknamesToAddresses[nickname] = msg.sender;
+        // addressesToNicknames[msg.sender] = nickname;
+
+        // Emit event
+        emit PlayerHasJoined(msg.sender);//, nickname);
+
+        // Mint new set of cards
+        mint(msg.sender, ROCK, 4, emptyData);
+        mint(msg.sender, PAPER, 4, emptyData);
+        mint(msg.sender, SCISSORS, 4, emptyData);
+        
+        // Mint new set of stars
+        mint(msg.sender, STAR, 3, emptyData);
     }
 
-    // Written from the perspective of the challenger, who must now reveal their card by proving their hash
-    function reveal(address challengee, uint cardType, string calldata salt) public returns(string memory) {
+    function gameOverCheck(address player) internal {
+        //Check if player has no stars remaining
+        if (balanceOf(player, STAR) == 0){
+            // DOUBLE check!
+            if (balanceOf(player, STAR) > 0) {revert PlayerStillHasStars();}
+
+            //Burn remaining cards
+            _burn(player, ROCK, balanceOf(player, ROCK));
+            _burn(player, PAPER, balanceOf(player, PAPER));
+            _burn(player, SCISSORS, balanceOf(player, SCISSORS));
+
+            //De-register address and nickname
+            // nicknamesToAddresses[addressesToNicknames[player]] = address(0);
+            // addressesToNicknames[player] = emptyString;
+            players[player] = false;
+        }
+    }
+
+    function cashOut() public {
+        // Check that player has no cards remaining
+        if (totalCards(msg.sender) > 0) {revert PlayerStillHasCards();}
+        // Check that player has 3 or more stars remaining
+        if (balanceOf(msg.sender, STAR) < 3) {revert InsufficientStars();}
+
+        // TODO: Implement cashing out stars from the contract's account -- 0.03 Eth per star on a 0.1 Eth buyin?
+        // For now, just burn the remaining stars
+        _burn(msg.sender, STAR, balanceOf(msg.sender, STAR)); 
+
+        //De-register address and nickname
+        // nicknamesToAddresses[addressesToNicknames[msg.sender]] = address(0);
+        // addressesToNicknames[msg.sender] = emptyString;
+        players[msg.sender] = false;
+    }
+
+    // function challengeCommit(string memory challengeeNickname, bytes32 hash) public {
+    //     if (nicknamesToAddresses[challengeeNickname] == address(0)) {revert NicknameNotFound();}
+    //     challengeCommit(nicknamesToAddresses[challengeeNickname], hash);
+    // }
+
+    // This function is written from the perspective of the challenger
+    function challengeCommit(address challengee, bytes32 hash) public {
+
+        // Check that player is in the game 
+        if (players[msg.sender] == false) {revert PlayerNotFound();}
+
+        // Check that challenger and challengee are different accounts
+        if (msg.sender == challengee) {revert NoSelfChallenge();}
+
+        // Check that challenger has at least one star and at least one card remaining
+        if (balanceOf(msg.sender, STAR) == 0) {revert PlayerHasNoStars();}
+        if (totalCards(msg.sender) == 0) {revert PlayerHasNoCards();}
+        
+        // Check that challengee has at least one star and at least one card remaining
+        if (balanceOf(challengee, STAR) == 0) {revert PlayerHasNoStars();}
+        if (totalCards(challengee) == 0) {revert PlayerHasNoCards();}
+
+        // Check that challenger has at least one card and at least one star not already committed to a challenge
+        if ((totalCards(msg.sender) - challengesCount[msg.sender]) < 1) {revert PlayerHasNoUncommittedCards();}
+        if ((balanceOf(msg.sender, STAR) - challengesCount[msg.sender]) < 1) {revert PlayerHasNoUncommittedStars();}
+
+        // Check that challengee has at least one card and at least one star not already committed to a challenge
+        if ((totalCards(challengee) - challengesCount[challengee]) < 1) {revert PlayerHasNoUncommittedCards();}
+        if ((balanceOf(challengee, STAR) - challengesCount[challengee]) < 1) {revert PlayerHasNoUncommittedStars();}
+
+        // Check that challengee doesn't have an open challenge against challenger and vise versa
+        if (challenges[challengee][msg.sender].exists) {revert PlayerAlreadyChallenged();}
+        if (challenges[msg.sender][challengee].exists) {revert PlayerAlreadyChallenged();}
+
+        // Set challenges mapping challenger -> challengee -> cardType and increment challengeCount for challenger 
+        challenges[msg.sender][challengee].hash = hash;
+        challenges[msg.sender][challengee].exists = true;
+        challengesCount[msg.sender] += 1;
+        
+    }
+
+    // function openCommit(string memory challengerNickname, uint cardType) public {
+    //     if (nicknamesToAddresses[challengerNickname] == address(0)) {revert NicknameNotFound();}
+    //     openCommit(nicknamesToAddresses[challengerNickname], cardType);
+    // }
+
+    // This function is written from the perspective of the challengee
+    function openCommit(address challenger, uint cardType) public{
+
+        // Check that challengee has been challenged by challenger
+        if (!challenges[challenger][msg.sender].exists) {revert NotYetChallenged();}
+
+        // Check to see if challenger is still in the game. If they are not, withdraw the challenge and end function early
+        if (players[challenger] == false){
+            delete challenges[challenger][msg.sender];
+            emit PlayerHasLeft(challenger);//, addressesToNicknames[challenger]);
+            return ();
+        }
 
         // Check that cardType is one of ROCK (1), PAPER (2), SCISSORS (3)
-        require(cardType > 0 && cardType < 4, "cardType must be 1, 2, or 3 (corresponding to ROCK, PAPER, and SCISSORS, respectively.");
+        if(cardType < 1 || cardType > 3) {revert MustBeRockPaperOrScissors();}
+
+        // Check that challenger and challengee are different accounts
+        if (msg.sender == challenger) {revert NoSelfChallenge();}
+
+        // Check that challengee has at least one card and at least one star not already committed to a challenge
+        if ((totalCards(msg.sender) - challengesCount[msg.sender]) < 1) {revert PlayerHasNoUncommittedCards();}
+        if ((balanceOf(msg.sender, STAR) - challengesCount[msg.sender]) < 1) {revert PlayerHasNoUncommittedStars();}
+
+        // Check that challengee has at least one copy of the card they're trying to commit
+        if(balanceOf(msg.sender, cardType) < 1) {revert NeedCopyOfCard();}
+
+        // Set challenges mapping challengee -> challenger -> cardType
+        challenges[msg.sender][challenger].cardType = cardType;
+        challenges[msg.sender][challenger].exists = true;
+
+        // Increment challengeCount for challengee 
+        challengesCount[msg.sender] += 1;
+    }
+
+    // function reveal(string memory challengeeNickname, uint cardType, string calldata salt) public {
+    //     if (nicknamesToAddresses[challengeeNickname] == address(0)) {revert NicknameNotFound();} 
+    //     reveal(nicknamesToAddresses[challengeeNickname], cardType, salt);
+    // }
+
+    // Written from the perspective of the challenger, who must now reveal their card by proving their hash
+    function reveal(address challengee, uint cardType, string calldata salt) public {
+
+        // Check that cardType is one of ROCK (1), PAPER (2), SCISSORS (3)
+        if(cardType < 1 || cardType > 3) {revert MustBeRockPaperOrScissors();}
 
         // Check to ensure that an open commit from the challengee exists against the challenger's challenge
-        require(challenges[msg.sender][challengee].exists, "You haven't challenged this player yet.");
-        require(challenges[challengee][msg.sender].exists, "This player hasn't yet responded to your challenge.");
+        if(!challenges[challengee][msg.sender].exists) {revert NotYetChallenged();}
+        if(!challenges[msg.sender][challengee].exists) {revert NoOpenCommit();}
 
         // Check to see if challengee is still in the game. If they are not, withdraw the challenge and end function early
         if (players[challengee] == false){
             delete challenges[challengee][msg.sender];
             delete challenges[msg.sender][challengee];
-            emit PlayerNotFound(challengee, "Player not found! Removing challenge...");
+            emit PlayerHasLeft(challengee);//, addressesToNicknames[challengee]);
+            return ();
         }
 
         // Check that challenger isn't revealing against themselves
-        require(msg.sender != challengee, "You cannot reveal against yourself!");
+        if (msg.sender == challengee) {revert NoSelfChallenge();}
 
         // Check that challenger's hash is solved using the card type and salt.
         // If they fail to do so, they get a hash strike and the function returns.
@@ -229,7 +250,8 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
             challengerCard = cardType;
         } else if (!challenges[msg.sender][challengee].hashStrike) {
             challenges[msg.sender][challengee].hashStrike = true;
-            return ("Challenger failed to reproduce hash for a card they own in sufficient quantity. Strike issued. Another failure will result in automatic win for the challengee.");
+            emit ChallengerFailedHashOnce(msg.sender);//, addressesToNicknames[msg.sender]);
+            return ();
         } else {
             challengerCard = 0;
         }
@@ -255,7 +277,7 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
         else if (challengerCard == ROCK && challengeeCard == PAPER)     {gameResult = GameResult.Challenger_Loses;}
         else if (challengerCard == PAPER && challengeeCard == SCISSORS) {gameResult = GameResult.Challenger_Loses;}
         else if (challengerCard == SCISSORS && challengeeCard == ROCK)  {gameResult = GameResult.Challenger_Loses;}
-        else {revert("Invalid card combination; something went wrong!");}
+        else {revert InvalidCardCombination();}
 
         // If the outcome is legitimate, burn both cards used, otherwise, only burn the legit cards.
 
@@ -270,11 +292,11 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
         // If there's a winner, move one star from loser to winner
         if (gameResult == GameResult.Challenger_Loses || gameResult == GameResult.Misplay_Challenger_Loses){
             _burn(msg.sender, STAR, 1);
-            mint(challengee, STAR, 1, "");
+            mint(challengee, STAR, 1, emptyData);
         }
         if (gameResult == GameResult.Challenger_Wins || gameResult == GameResult.Misplay_Challenger_Wins){
             _burn(challengee, STAR, 1);
-            mint(msg.sender, STAR, 1, "");
+            mint(msg.sender, STAR, 1, emptyData);
         }
         // If the result is a double misplay, burn one star from both participants.
         if (gameResult == GameResult.Misplay_Tie) {
@@ -294,12 +316,12 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
         gameOverCheck(msg.sender);
         gameOverCheck(challengee);
 
-        return("Match complete!");
+        return();
     }
 
-    function withdrawChallenge(string memory challengeeNickname) public {
-        withdrawChallenge(nicknamesToAddresses[challengeeNickname]);
-    }
+    // function withdrawChallenge(string memory challengeeNickname) public {
+    //     withdrawChallenge(nicknamesToAddresses[challengeeNickname]);
+    // }
 
     function withdrawChallenge(address challengee) public {
         
@@ -315,9 +337,9 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
 
     }
 
-    function withdrawOpenCommit(string memory challengerNickname) public {
-        withdrawOpenCommit(nicknamesToAddresses[challengerNickname]);
-    }
+    // function withdrawOpenCommit(string memory challengerNickname) public {
+    //     withdrawOpenCommit(nicknamesToAddresses[challengerNickname]);
+    // }
 
     function withdrawOpenCommit(address challenger) public {
 
@@ -333,7 +355,7 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
     }
 
 
-
+ 
     function setURI(string memory newuri) internal {
         _setURI(newuri);
     }
@@ -350,19 +372,18 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
         _mintBatch(to, ids, amounts, data);
     }
 
-    // Pure has function
+    // Pure hash function
     function hashCommit(uint cardType, string calldata salt) public view returns(bytes32) {
-        require((cardType > 0) && (cardType < 4), "Please enter a valid card type (id must be 1, 2, or 3).");
+        if(cardType < 1 || cardType > 3) {revert MustBeRockPaperOrScissors();}
         return keccak256(abi.encodePacked(msg.sender, cardType, salt));
     }
 
     // Transfer Overrides
 
-    function safeTransferFrom(address from, address to, uint256 id, uint256 value, bytes memory data) public pure override {
-        revert("ERC1155 Transfer standards disabled for this game.");
+    function safeTransferFrom(address from, address to, uint256 id, uint256 amount, bytes memory data) public override {
+        _safeTransferFrom(from, to, id, amount, data);
     }
-    function safeBatchTransferFrom(address from,address to,uint256[] memory ids,uint256[] memory values,bytes memory data) public pure override {
-        revert("ERC1155 Transfer standards disabled for this game.");
+    function safeBatchTransferFrom(address from, address to, uint256[] memory ids, uint256[] memory amounts, bytes memory data) public override {
+        _safeBatchTransferFrom(from, to, ids, amounts, data);
     }
-
 }
