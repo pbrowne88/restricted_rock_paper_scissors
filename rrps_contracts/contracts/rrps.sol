@@ -18,16 +18,15 @@ TODO LIST:
 - Add block number logging and logic for allowing chalengees to automatically win if the 
   challenger doesn't reveal in a reasonable timeframe
 
-- 
+- Create separate commit trackers for each kind of card (rock, paper, scissors) so that 
+  players can't commit to a challenge with a card they don't have, and so that players
+  can't trade away cards they (might) have committed to a challenge.
 
 */
 
 
 contract RRPS is ERC1155, Ownable, BalanceCheckers {
     constructor() ERC1155(emptyString) {}
-
-    // Nested mapping allows rapid identification of who is challenging whom
-    // TODO: REPLACE BOOL WITH HASH OR THE STRUCT??
 
     struct commit {
         bytes32 hash;
@@ -36,37 +35,6 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
         bool hashStrike; 
         uint blockNum;
     }
-
-    mapping (address => mapping (address => commit)) challenges;
-    mapping (address => uint) challengesCount;
-
-    event PlayerHasJoined(address playerAddress); //, string nickname);
-
-    // error NicknameAlreadyExists();
-    error AddressAlreadyPlaying();
-    error PlayerNotFound();
-    error PlayerHasNoStars();
-    error PlayerHasNoCards();
-    error PlayerHasNoUncommittedCards();
-    error PlayerHasNoUncommittedStars();
-    error PlayerStillHasStars();
-    error PlayerStillHasCards();
-    error InsufficientStars();
-    // error NicknameNotFound();
-    error NoSelfChallenge();
-    error PlayerAlreadyChallenged();
-    error NotYetChallenged();
-    error MustBeRockPaperOrScissors();
-    error NeedCopyOfCard();
-    error NoOpenCommit();
-    error InvalidCardCombination();
-
-    event PlayerHasLeft(address playerAddress);//, string nickname);
-    event ChallengerFailedHashOnce(address challenger);//, string nickname);
-    event ChallengerFailedHashTwice(address challenger);//, string nickname);
-
-    bytes emptyData = "";
-    string emptyString = "";
 
     enum GameResult {
         Challenger_Loses,
@@ -77,21 +45,66 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
         Misplay_Challenger_Wins     // Result if the challengee doesn't possess a card of the type they committed
     }
 
-    function startGame() public {//string memory nickname) public /* payable */ {
+    mapping (address => bool) players;
+    mapping (address => mapping (address => commit)) challenges;
+    mapping (address => uint) challengesCount;
+    
+    error AddressAlreadyPlaying();
+    error PlayerNotFound();
+    error PlayerHasNoStars();
+    error PlayerHasNoCards();
+    error PlayerHasNoUncommittedCards();
+    error PlayerHasNoUncommittedStars();
+    error PlayerStillHasStars();
+    error PlayerStillHasCards();
+    error InsufficientStars();
+    error NoSelfChallenge();
+    error PlayerAlreadyChallenged();
+    error NotYetChallenged();
+    error MustBeRockPaperOrScissors();
+    error NeedCopyOfCard();
+    error NoOpenCommit();
+    error InvalidCardCombination();
+    error OtherPlayerAlreadyCommitted();
+
+    event PlayerJoined(address playerAddress, string nickname);
+    event PlayerLeft(address playerAddress); // A player has left the game for any reason
+    event PlayerEliminated(address playerAddress);  // Player has lost all of their stars
+    event PlayerCashedOut(address playerAddress); // Player voluntarily cashes out
+    
+    event ChallengeCommit(address challenger, address challengee); // Challenger has issued a challenge to challengee
+    event OpenCommit(address challenger, address challengee); // Challengee has made an open commit to challenger's challenge
+
+    event ChallengerWins(address challenger, uint challengerCard, address challengee, uint challengeeCard); // Challenger has won the challenge against challengee
+    event ChallengerLoses(address challenger, uint challengerCard, address challengee, uint challengeeCard); // Challengee has won the challenge against challenger
+    event Tie(address challenger, uint challengerCard, address challengee, uint challengeeCard); // Challenger and challengee have tied
+    event Misplay(address player, uint card); // Player has misplayed a card
+
+    event WithdrawnChallengeCommit(address challenger, address challengee); // Challenger has withdrawn their challenge to challengee
+    event WithdrawnOpenCommit(address challenger, address challengee); // Challengee has withdrawn their open commit to challenger
+    
+    event OrphanedChallenge(address challenger, address challengee); // Player left unresolved challenges behind
+    event ChallengerFailedHashOnce(address challenger, address challengee); // Challenger failed to solve hash once
+    event ChallengerFailedHashTwice(address challenger, address challengee); // Challenger failed to solve hash twice (auto-loss of star with no card burnt)
+
+    event TokenTransfer(address from, address to, uint256 id, uint256 amount); // ERC1155 Transfer event
+
+    bytes emptyData = "";
+    string emptyString = "";
+
+    function startGame(string memory nickname) public /* payable */ {
         // Check payment
         // require(msg.value >= 0.1 ether);
-        // Ensure that nickname is unique
-        // if (nicknamesToAddresses[nickname] != address(0)) {revert NicknameAlreadyExists();}
         // Ensure that address is not currently playing the game
         if (players[msg.sender] == true) {revert AddressAlreadyPlaying();}
         // Log the address as playing the game
         players[msg.sender] = true; 
-        // Associate the nickname 
-        // nicknamesToAddresses[nickname] = msg.sender;
-        // addressesToNicknames[msg.sender] = nickname;
+        // Set challenges count to zero;
+        challengesCount[msg.sender] = 0;
+
 
         // Emit event
-        emit PlayerHasJoined(msg.sender);//, nickname);
+        emit PlayerJoined(msg.sender, nickname);
 
         // Mint new set of cards
         mint(msg.sender, ROCK, 4, emptyData);
@@ -113,10 +126,10 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
             _burn(player, PAPER, balanceOf(player, PAPER));
             _burn(player, SCISSORS, balanceOf(player, SCISSORS));
 
-            //De-register address and nickname
-            // nicknamesToAddresses[addressesToNicknames[player]] = address(0);
-            // addressesToNicknames[player] = emptyString;
+
             players[player] = false;
+            emit PlayerEliminated(player);
+            emit PlayerLeft(player);
         }
     }
 
@@ -130,16 +143,10 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
         // For now, just burn the remaining stars
         _burn(msg.sender, STAR, balanceOf(msg.sender, STAR)); 
 
-        //De-register address and nickname
-        // nicknamesToAddresses[addressesToNicknames[msg.sender]] = address(0);
-        // addressesToNicknames[msg.sender] = emptyString;
         players[msg.sender] = false;
+        emit PlayerCashedOut(msg.sender);
+        emit PlayerLeft(msg.sender);
     }
-
-    // function challengeCommit(string memory challengeeNickname, bytes32 hash) public {
-    //     if (nicknamesToAddresses[challengeeNickname] == address(0)) {revert NicknameNotFound();}
-    //     challengeCommit(nicknamesToAddresses[challengeeNickname], hash);
-    // }
 
     // This function is written from the perspective of the challenger
     function challengeCommit(address challengee, bytes32 hash) public {
@@ -174,16 +181,15 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
         challenges[msg.sender][challengee].hash = hash;
         challenges[msg.sender][challengee].exists = true;
         challengesCount[msg.sender] += 1;
-        
-    }
 
-    // function openCommit(string memory challengerNickname, uint cardType) public {
-    //     if (nicknamesToAddresses[challengerNickname] == address(0)) {revert NicknameNotFound();}
-    //     openCommit(nicknamesToAddresses[challengerNickname], cardType);
-    // }
+        emit ChallengeCommit(msg.sender, challengee);
+    }
 
     // This function is written from the perspective of the challengee
     function openCommit(address challenger, uint cardType) public{
+
+        // Check that player is in the game 
+        if (players[msg.sender] == false) {revert PlayerNotFound();}
 
         // Check that challengee has been challenged by challenger
         if (!challenges[challenger][msg.sender].exists) {revert NotYetChallenged();}
@@ -191,7 +197,7 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
         // Check to see if challenger is still in the game. If they are not, withdraw the challenge and end function early
         if (players[challenger] == false){
             delete challenges[challenger][msg.sender];
-            emit PlayerHasLeft(challenger);//, addressesToNicknames[challenger]);
+            emit OrphanedChallenge(challenger, msg.sender);
             return ();
         }
 
@@ -214,20 +220,20 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
 
         // Increment challengeCount for challengee 
         challengesCount[msg.sender] += 1;
-    }
 
-    // function reveal(string memory challengeeNickname, uint cardType, string calldata salt) public {
-    //     if (nicknamesToAddresses[challengeeNickname] == address(0)) {revert NicknameNotFound();} 
-    //     reveal(nicknamesToAddresses[challengeeNickname], cardType, salt);
-    // }
+        emit OpenCommit(challenger, msg.sender);
+    }
 
     // Written from the perspective of the challenger, who must now reveal their card by proving their hash
     function reveal(address challengee, uint cardType, string calldata salt) public {
 
+        // Check that player is in the game 
+        if (players[msg.sender] == false) {revert PlayerNotFound();}
+
         // Check that cardType is one of ROCK (1), PAPER (2), SCISSORS (3)
         if(cardType < 1 || cardType > 3) {revert MustBeRockPaperOrScissors();}
 
-        // Check to ensure that an open commit from the challengee exists against the challenger's challenge
+        // Check to ensure that an open commit from the challengee exists against the challenger's challenge (which also needs to exist)
         if(!challenges[challengee][msg.sender].exists) {revert NotYetChallenged();}
         if(!challenges[msg.sender][challengee].exists) {revert NoOpenCommit();}
 
@@ -235,7 +241,8 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
         if (players[challengee] == false){
             delete challenges[challengee][msg.sender];
             delete challenges[msg.sender][challengee];
-            emit PlayerHasLeft(challengee);//, addressesToNicknames[challengee]);
+            challengesCount[msg.sender] -= 1;
+            emit OrphanedChallenge(msg.sender, challengee);
             return ();
         }
 
@@ -250,12 +257,12 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
             challengerCard = cardType;
         } else if (!challenges[msg.sender][challengee].hashStrike) {
             challenges[msg.sender][challengee].hashStrike = true;
-            emit ChallengerFailedHashOnce(msg.sender);//, addressesToNicknames[msg.sender]);
+            emit ChallengerFailedHashOnce(msg.sender, challengee);
             return ();
         } else {
+            emit ChallengerFailedHashTwice(msg.sender, challengee);
             challengerCard = 0;
         }
-        
         
         uint challengeeCard = challenges[challengee][msg.sender].cardType;
         
@@ -281,27 +288,34 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
 
         // If the outcome is legitimate, burn both cards used, otherwise, only burn the legit cards.
 
-        if      (gameResult == GameResult.Misplay_Challenger_Loses)     {_burn(challengee, challengeeCard, 1);}
-        else if (gameResult == GameResult.Misplay_Challenger_Wins)      {_burn(msg.sender, challengerCard, 1);}
+        if      (gameResult == GameResult.Misplay_Challenger_Loses)     {_burn(challengee, challengeeCard, 1); emit Misplay(msg.sender, challengerCard);}
+        else if (gameResult == GameResult.Misplay_Challenger_Wins)      {_burn(msg.sender, challengerCard, 1); emit Misplay(challengee, challengeeCard);}
         else {
             _burn(msg.sender, challengerCard, 1);
             _burn(challengee, challengeeCard, 1);
         }
 
-
         // If there's a winner, move one star from loser to winner
         if (gameResult == GameResult.Challenger_Loses || gameResult == GameResult.Misplay_Challenger_Loses){
             _burn(msg.sender, STAR, 1);
             mint(challengee, STAR, 1, emptyData);
+            emit ChallengerLoses(msg.sender, challengerCard, challengee, challengeeCard);
         }
         if (gameResult == GameResult.Challenger_Wins || gameResult == GameResult.Misplay_Challenger_Wins){
             _burn(challengee, STAR, 1);
             mint(msg.sender, STAR, 1, emptyData);
+            emit ChallengerWins(msg.sender, challengerCard, challengee, challengeeCard);
         }
         // If the result is a double misplay, burn one star from both participants.
         if (gameResult == GameResult.Misplay_Tie) {
             _burn(msg.sender, STAR, 1);
             _burn(challengee, STAR, 1);
+            emit Misplay(msg.sender, challengerCard);
+            emit Misplay(challengee, challengeeCard);
+        }
+        // If the result is a legitimate tie, no stars change hands
+        if (gameResult == GameResult.Tie) {
+            emit Tie(msg.sender, challengerCard, challengee, challengeeCard);
         }
 
         // Set challenges mapping for both address orderings to false or 0??
@@ -315,47 +329,33 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
         // Check for Game Over for both players
         gameOverCheck(msg.sender);
         gameOverCheck(challengee);
-
-        return();
     }
-
-    // function withdrawChallenge(string memory challengeeNickname) public {
-    //     withdrawChallenge(nicknamesToAddresses[challengeeNickname]);
-    // }
 
     function withdrawChallenge(address challengee) public {
         
         // Check that player has an ongoing challenge against another player
-        require(challenges[msg.sender][challengee].exists);
+        if (!challenges[msg.sender][challengee].exists) {revert NotYetChallenged();}
 
         // Ensure that the other player hasn't yet made an open commit to the challenge
-        require(challenges[challengee][msg.sender].exists == false);
+        if(challenges[challengee][msg.sender].exists) {revert OtherPlayerAlreadyCommitted();}
 
         // Withdraw the challenge by deregistering and decrementing challengesCount
         delete challenges[msg.sender][challengee];
         challengesCount[msg.sender] -= 1;
-
+        emit WithdrawnChallengeCommit(msg.sender, challengee);
     }
-
-    // function withdrawOpenCommit(string memory challengerNickname) public {
-    //     withdrawOpenCommit(nicknamesToAddresses[challengerNickname]);
-    // }
 
     function withdrawOpenCommit(address challenger) public {
 
-        // Check that sender has made an open commit against another player's ongoing challenge
-        require(challenges[msg.sender][challenger].exists);
-
-        // There shouldn't be any need to ensure that the reveal hasn't happened yet, as the challenge 
-        // will be deregistered as soon as the reveal occurs
+        // Check that sender (challengee) has made an open commit against another player's ongoing challenge
+        if(!challenges[msg.sender][challenger].exists) {revert NotYetChallenged();}
 
         // Withdraw the open commit by deregistering and decrementing challengesCount
         delete challenges[msg.sender][challenger];
         challengesCount[msg.sender] -= 1;
+        emit WithdrawnOpenCommit(challenger, msg.sender);
     }
 
-
- 
     function setURI(string memory newuri) internal {
         _setURI(newuri);
     }

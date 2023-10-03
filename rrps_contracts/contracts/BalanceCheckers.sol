@@ -10,10 +10,6 @@ abstract contract BalanceCheckers is ERC1155 {
     uint public constant PAPER = 2;
     uint public constant SCISSORS = 3;
 
-    mapping(address => bool) players;
-    // mapping(string => address) nicknamesToAddresses;
-    // mapping(address => string) addressesToNicknames;
-
     function contractBalance() public view returns(uint256) {
         return(address(this).balance);
     }
@@ -30,10 +26,6 @@ abstract contract BalanceCheckers is ERC1155 {
         return(balanceOf(msg.sender));
     }
     
-    // function balanceOf(string memory nickname) public view returns(uint256, uint256, uint256, uint256){
-    //     return(balanceOf(nicknamesToAddresses[nickname]));
-    // }
-    
     function balanceOf(address account) public view returns(uint256, uint256, uint256, uint256) {
         return (
             balanceOf(account, 0),
@@ -42,10 +34,4 @@ abstract contract BalanceCheckers is ERC1155 {
             balanceOf(account, 3)
         );
     }
-
-    // function balanceOf(string memory nickname, uint256 id) internal view {
-    //     balanceOf(nicknamesToAddresses[nickname], id);
-    // }
-
-
 }
