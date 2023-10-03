@@ -1,22 +1,27 @@
 // App.js
 import React, { useState, useEffect } from 'react';
-import Select from 'react-select';
 import './App.css';
 import Web3 from 'web3';
-
+import Select from 'react-select'
 const abi = require('./RRPS.json').abi;
 
 var PlayerJoinedEvents = [];
 
+const optionsForSelect = [
+  { value: 'chocolate', label: 'Chocolate' },
+  { value: 'strawberry', label: 'Strawberry' },
+  { value: 'vanilla', label: 'Vanilla' }
+]
+
+
 function App() {
 
+
   // Web3 Shit
-
-
   const Ganache = new Web3("HTTP://127.0.0.1:7545");
   const accounts = Ganache.eth.getAccounts();
 
-  const contract = new Ganache.eth.Contract(abi, '0x665921C31AfF8C605d7d039Fb65f274FB700FC87');
+  const contract = new Ganache.eth.Contract(abi, '0x9922E81426e85EbC2e829E75644724F2096B2B44');
 
   async function interact(){
     const providersAccounts = await Ganache.eth.getAccounts();
@@ -76,6 +81,11 @@ function App() {
   const [paper, setPaper] = useState(0);
   const [scissors, setScissor] = useState(0);
 
+  const [totalStars, setTotalStars] = useState(0);
+  const [totalRock, setTotalRock] = useState(0);
+  const [totalPaper, setTotalPaper] = useState(0);
+  const [totalScissors, setTotalScissor] = useState(0);
+
 
   async function getBalance(){
     const providersAccounts = await Ganache.eth.getAccounts();
@@ -97,9 +107,19 @@ function App() {
       console.error(error);
     }
   }
-  
-  
 
+  async function getTotal(id) {
+    const result = await contract.methods.totals(id).call();
+    return parseInt(result);
+  }
+
+  async function getTotals() {
+    setTotalStars(await getTotal(0));
+    setTotalRock(await getTotal(1));
+    setTotalPaper(await getTotal(2));
+    setTotalScissor(await getTotal(3));
+  }
+  
   // Metamask Shit
 
   // const [web3, setWeb3] = useState(null);
@@ -179,7 +199,7 @@ function App() {
       <div className="result" style={{position: 'fixed', bottom: 5, left:5 }}>
         {
           <div className="result">
-            <h2>Your Inventory:</h2>
+            <h2>Inventory:</h2>
             <p>Stars: {stars}</p>
             <p>Rock: {rock}</p>
             <p>Paper: {paper}</p>
@@ -196,17 +216,16 @@ function App() {
       <div className="result" style={{position: 'fixed', bottom: 5, right:5 }}>
         {
           <div className="result">
-            <h2>Your Inventory:</h2>
-            <span>&nbsp;&nbsp;</span>
-            <p>Rock: {rock}</p>
-            <p>Paper: {paper}</p>
-            <p>Scissors: {scissors}</p>
-            <button onClick={getBalance}>Update Inventory</button>
+            <h2>Totals:</h2>
+            <p>Stars: {totalStars}</p>
+            <p>Rock: {totalRock}</p>
+            <p>Paper: {totalPaper}</p>
+            <p>Scissors: {totalScissors}</p>
+            <button onClick={getTotals}>Update Inventory</button>
           </div>
         }
       </div>
     );
-
   };
 
   const ResultsComponent = () => {
@@ -246,6 +265,7 @@ function App() {
         ))}
       </div>
       <ResultsComponent />
+      <Select options={optionsForSelect}/>
       <InventoryComponent />
       <TotalsComponent />
     </div>

@@ -48,6 +48,7 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
     mapping (address => bool) players;
     mapping (address => mapping (address => commit)) challenges;
     mapping (address => uint) challengesCount;
+    mapping (uint => uint) public totals;
     
     error AddressAlreadyPlaying();
     error PlayerNotFound();
@@ -360,16 +361,14 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
         _setURI(newuri);
     }
 
-    function mint(address account, uint256 id, uint256 amount, bytes memory data)
-        internal
-    {
+    function mint(address account, uint256 id, uint256 amount, bytes memory data) internal {
         _mint(account, id, amount, data);
+        totals[id] += amount;
     }
 
-    function mintBatch(address to, uint256[] memory ids, uint256[] memory amounts, bytes memory data)
-        internal
-    {
-        _mintBatch(to, ids, amounts, data);
+    function burn(address from, uint256 id, uint256 amount) internal {
+        _burn(from, id, amount);
+        totals[id] -= amount;
     }
 
     // Pure hash function
