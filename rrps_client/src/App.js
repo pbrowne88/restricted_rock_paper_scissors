@@ -6,6 +6,8 @@ import Web3 from 'web3';
 
 const abi = require('./RRPS.json').abi;
 
+var PlayerJoinedEvents = [];
+
 function App() {
 
   // Web3 Shit
@@ -14,34 +16,58 @@ function App() {
   const Ganache = new Web3("HTTP://127.0.0.1:7545");
   const accounts = Ganache.eth.getAccounts();
 
-  const contract = new Ganache.eth.Contract(abi, '0xEc2226e1a33b4dB2ac8811051F2F7d3Fe0faA232');
+  const contract = new Ganache.eth.Contract(abi, '0x665921C31AfF8C605d7d039Fb65f274FB700FC87');
 
   async function interact(){
     const providersAccounts = await Ganache.eth.getAccounts();
-    const defaultAccount = providersAccounts[0];
-    const player2 = providersAccounts[1];
-    const player3 = providersAccounts[2];
+    // const defaultAccount = providersAccounts[0];
+    // const player2 = providersAccounts[1];
+    // const player3 = providersAccounts[2];
 
-    try{
-      await contract.methods.startGame().send({
-        from: player2,
-        gas: 1000000,
-      });
-    }
-    catch (error){
-      console.error(error);
-    }
+    const nicknames = ['player1', 'player2', 'player3'];
 
-    contract.getPastEvents('PlayerHasJoined')
+    for (let i = 0; i < nicknames.length; i++) {
+      try{
+        await contract.methods.startGame(nicknames[i]).send({
+          from: providersAccounts[i],
+          gas: 1000000,
+        });
+      }
+      catch (error){
+        console.error(error);
+      }
+    }
+  };
+
+  async function getNicknames(){
+    PlayerJoinedEvents = await contract.getPastEvents('allEvents', {fromBlock:1})
     .then(function(events) {
       // Process the retrieved events
       console.log(events);
+      return events;
     })
     .catch(function(error) {
       // Handle errors
       console.error(error);
     });
   }
+
+  // NOTE TO FUTURE PIERSON: You can use something like `PlayerJoinedEvents[i].event` to get the event type; 
+  // their order is preserved, so you could easily iterate through them, adding and removing players as the events dictate
+  // to inefficiently reconstruct the current list of players and their nicknames. 
+
+  function readNicknames(){
+    for (let i = 0; i < PlayerJoinedEvents.length; i++) {
+      console.log(i)
+      const nickname = PlayerJoinedEvents[i].returnValues.nickname;
+      //const nickname = PlayerJoinedEvents[i]['returnValues']['nickname'];
+      console.log(nickname); 
+      const address = PlayerJoinedEvents[i].returnValues.playerAddress;
+      //const nickname = PlayerJoinedEvents[i]['returnValues']['nickname'];
+      console.log(address);
+    }
+  }
+
 
 
 
@@ -195,7 +221,11 @@ function App() {
         <span>&nbsp;&nbsp;</span>
         <span>&nbsp;&nbsp;</span>
         <span>&nbsp;&nbsp;</span>
-        <button className="choice-button" onClick={interact}>SEND TRANSACTION</button>
+        <button className="choice-button" onClick={interact}>REGISTER PLAYERS</button>
+        <span>&nbsp;&nbsp;</span>
+        <button className="choice-button" onClick={getNicknames}>GET NICKNAMES</button>
+        <span>&nbsp;&nbsp;</span>
+        <button className="choice-button" onClick={readNicknames}>READ NICKNAMES</button>
       </div>
     )
   };
