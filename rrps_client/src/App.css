@@ -14,6 +14,14 @@ h1 {
   font-size: 2.5rem;
   color: #61dafb; /* A bright accent color for the header */
   margin-bottom: 20px;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+h2 {
+  font-size: 2rem;
+  color: rgb(76, 96, 151); /* A bright accent color for the header */
+  margin-bottom: 20px;
+  font-family: 'Courier New', Courier, monospace;
 }
 
 body {
@@ -57,4 +65,10 @@ body {
   .choice-button {
     font-size: 1.2rem;
   }
+}
+
+
+.select {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 30  ;
 }

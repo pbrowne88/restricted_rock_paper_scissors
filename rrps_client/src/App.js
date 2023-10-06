@@ -5,8 +5,6 @@ import Web3 from 'web3';
 import Select from 'react-select'
 const abi = require('./RRPS.json').abi;
 
-var PlayerJoinedEvents = [];
-
 const optionsForSelect = [
   { value: 'chocolate', label: 'Chocolate' },
   { value: 'strawberry', label: 'Strawberry' },
@@ -16,6 +14,18 @@ const optionsForSelect = [
 
 function App() {
 
+  const [stars, setStars] = useState(0);
+  const [rock, setRock] = useState(0);
+  const [paper, setPaper] = useState(0);
+  const [scissors, setScissor] = useState(0);
+
+  const [totalStars, setTotalStars] = useState(0);
+  const [totalRock, setTotalRock] = useState(0);
+  const [totalPaper, setTotalPaper] = useState(0);
+  const [totalScissors, setTotalScissor] = useState(0);
+
+  const [playerNames, setPlayerNames] = useState([{value: 'No Player', label: 'No Players'}])
+  const [playerChoice, setPlayerChoice] = useState(0x00000000);
 
   // Web3 Shit
   const Ganache = new Web3("HTTP://127.0.0.1:7545");
@@ -45,46 +55,49 @@ function App() {
   };
 
   async function getNicknames(){
-    PlayerJoinedEvents = await contract.getPastEvents('allEvents', {fromBlock:1})
+    var Events = await contract.getPastEvents('allEvents', {fromBlock:1})
     .then(function(events) {
       // Process the retrieved events
-      console.log(events);
       return events;
     })
     .catch(function(error) {
       // Handle errors
       console.error(error);
     });
+
+    return Events;
   }
 
-  // NOTE TO FUTURE PIERSON: You can use something like `PlayerJoinedEvents[i].event` to get the event type; 
-  // their order is preserved, so you could easily iterate through them, adding and removing players as the events dictate
-  // to inefficiently reconstruct the current list of players and their nicknames. 
+  async function readNicknames(){
+    var Events = await getNicknames();
 
-  function readNicknames(){
-    for (let i = 0; i < PlayerJoinedEvents.length; i++) {
-      console.log(i)
-      const nickname = PlayerJoinedEvents[i].returnValues.nickname;
-      //const nickname = PlayerJoinedEvents[i]['returnValues']['nickname'];
-      console.log(nickname); 
-      const address = PlayerJoinedEvents[i].returnValues.playerAddress;
-      //const nickname = PlayerJoinedEvents[i]['returnValues']['nickname'];
-      console.log(address);
+    var nicknames = [];
+
+    for (let i = 0; i < Events.length; i++) {
+
+      // This adds a player that has joined
+      if (Events[i].event === 'PlayerJoined'){
+        const nickname = Events[i].returnValues.nickname;
+        console.log(nickname); 
+  
+        const address = Events[i].returnValues.playerAddress;
+        console.log(address);
+
+        nicknames.push({label: nickname, value: address})
+
+      }
+
+      // This removes a player that has already joined (and, I presume, won't fail if the player hasn't joined yet)
+      if (Events[i].event === 'PlayerLeft'){
+        const address = Events[i].returnValues.playerAddress;
+        console.log(address);
+
+        nicknames = nicknames.filter((item) => item.value !== address);
+      }
     }
+
+    setPlayerNames(nicknames);
   }
-
-
-
-
-  const [stars, setStars] = useState(0);
-  const [rock, setRock] = useState(0);
-  const [paper, setPaper] = useState(0);
-  const [scissors, setScissor] = useState(0);
-
-  const [totalStars, setTotalStars] = useState(0);
-  const [totalRock, setTotalRock] = useState(0);
-  const [totalPaper, setTotalPaper] = useState(0);
-  const [totalScissors, setTotalScissor] = useState(0);
 
 
   async function getBalance(){
@@ -154,46 +167,6 @@ function App() {
   // }
 
 
-  // RPS Shit
-
-  const [playerChoice, setPlayerChoice] = useState(null);
-  const [computerChoice, setComputerChoice] = useState(null);
-  const [result, setResult] = useState(null);
-
-  const [computerWins, setComputerWins] = useState(0);
-  const [playerWins, setPlayerWins] = useState(0);
-
-  const choices = ['rock', 'paper', 'scissors'];
-
-  const generateComputerChoice = () => {
-    const randomIndex = Math.floor(Math.random() * choices.length);
-    return choices[randomIndex];
-  };
-
-  const determineWinner = (player, computer) => {
-    if (player === computer) return 'It\'s a tie!';
-    if (
-      (player === 'rock' && computer === 'scissors') ||
-      (player === 'scissors' && computer === 'paper') ||
-      (player === 'paper' && computer === 'rock')
-    ) {
-      setPlayerWins(playerWins + 1);
-      return 'You win!';
-    }
-    setComputerWins(computerWins + 1);
-    return 'Computer wins!';
-  };
-
-  const playGame = (playerChoice) => {
-    const computerChoice = generateComputerChoice();
-    const winner = determineWinner(playerChoice, computerChoice);
-    
-    setPlayerChoice(playerChoice);
-    setComputerChoice(computerChoice);
-    setResult(winner);
-  };
-
-
   const InventoryComponent = () => {
     return (
       <div className="result" style={{position: 'fixed', bottom: 5, left:5 }}>
@@ -228,44 +201,42 @@ function App() {
     );
   };
 
-  const ResultsComponent = () => {
-    return(
-      <div className="result">
-        <p>You chose: {playerChoice}</p>
-        <p>Computer chose: {computerChoice}</p>
-        <p>{result}</p>
-        <span>&nbsp;&nbsp;</span>
-        <p>Total Player Wins: {playerWins}</p>
-        <p>Total Computer Wins (boo): {computerWins}</p>
-        <span>&nbsp;&nbsp;</span>
-        <span>&nbsp;&nbsp;</span>
-        <span>&nbsp;&nbsp;</span>
-        <button className="choice-button" onClick={interact}>REGISTER PLAYERS</button>
-        <span>&nbsp;&nbsp;</span>
-        <button className="choice-button" onClick={getNicknames}>GET NICKNAMES</button>
-        <span>&nbsp;&nbsp;</span>
-        <button className="choice-button" onClick={readNicknames}>READ NICKNAMES</button>
-      </div>
-    )
+  const handleSelectChange = (playerChoice) => {
+    console.log(playerChoice['value']);
+    setPlayerChoice(playerChoice);
   };
-    
 
   return (
     <div className="App">
       <h1>Restricted Rock-Paper-Scissors</h1>
-      <div className="choices">
-        {choices.map((choice) => (
-          <button
-            key={choice}
-            className="choice-button"
-            onClick={() => playGame(choice)}
-          >
-            {choice}
-          </button>
-        ))}
-      </div>
-      <ResultsComponent />
-      <Select options={optionsForSelect}/>
+      <span>&nbsp;&nbsp;</span>
+      <button className='choice-button' onClick={interact}>Start Game</button>
+      <span>&nbsp;&nbsp;</span>
+      <h2>Select Player:</h2>
+      <span>&nbsp;&nbsp;</span>
+      <Select className='select'
+        options={playerNames}
+        value = {playerChoice}
+        onChange = {handleSelectChange}
+        theme = {(theme) => ({
+          ...theme,
+          borderRadius: 0,
+          colors:{
+            ...theme.colors,
+            text: 'black',
+            neutral0: '#22839e',
+            neutral5: 'black',
+            neutral10: 'black',
+            neutral20: 'black',
+            neutral30: 'black',
+            neutral40: 'black',
+            neutral50: 'black',
+            neutral80: 'black',
+            primary25: 'black',
+            primary: '#000277'
+          }})}
+      />
+      <button className='choice-button' onClick={readNicknames}>Nicknames</button>
       <InventoryComponent />
       <TotalsComponent />
     </div>

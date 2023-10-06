@@ -68,7 +68,7 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
     error InvalidCardCombination();
     error OtherPlayerAlreadyCommitted();
 
-    event PlayerJoined(address playerAddress, string nickname);
+    event PlayerJoined(address playerAddress, string nickname); // A player has joined the game for any reason
     event PlayerLeft(address playerAddress); // A player has left the game for any reason
     event PlayerEliminated(address playerAddress);  // Player has lost all of their stars
     event PlayerCashedOut(address playerAddress); // Player voluntarily cashes out
