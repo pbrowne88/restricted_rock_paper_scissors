@@ -1,19 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
-import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Burnable.sol";
-import "./BalanceCheckers.sol";
-
 
 /*
 TODO LIST:
 
-- Make the standard ERC1155 "SafeTransfer" function private/internal and create a wrapper
-  that allows players to trade stars but does not allow for players to trade their last star.
-    - **OR**, as an alternative to the above; allow players to trade away their last star, 
-      but every trade checks for 0 stars and calls gameOver() if any player ends up with 0.
+- Implement cashing out stars from the contract's account -- 0.03 Eth per star on a 0.1 Eth buyin?
 
 - Add block number logging and logic for allowing chalengees to automatically win if the 
   challenger doesn't reveal in a reasonable timeframe
@@ -25,8 +18,45 @@ TODO LIST:
 */
 
 
-contract RRPS is ERC1155, Ownable, BalanceCheckers {
-    constructor() ERC1155(emptyString) {}
+contract RRPS is Ownable {
+
+    error AddressAlreadyPlaying();          // Address is already playing the game
+    error PlayerNotFound();                 // Address is not currently playing the game
+    error PlayerHasNoStars();               // Player has no stars remaining
+    error PlayerHasNoCards();               // Player has no cards remaining
+    error PlayerHasNoUncommittedCards();    // Player has no cards remaining that aren't already committed to a challenge
+    error PlayerHasNoUncommittedStars();    // Player has no stars remaining that aren't already committed to a challenge
+    error PlayerStillHasCards();            // Player still has cards remaining
+    error InsufficientStars();              // Player has less than 3 stars remaining
+    error NoSelfChallenge();                // Player cannot challenge themselves
+    error PlayerAlreadyChallenged();        // Player has already challenged the other player
+    error NotYetChallenged();               // Player has not yet been challenged by the other player
+    error MustBeRockPaperOrScissors();      // Card type must be 1, 2, or 3
+    error NeedCopyOfCard();                 // Player must have at least one copy of the card they're trying to commit
+    error NoOpenCommit();                   // Player has not yet made an open commit to the other player's challenge
+    error InvalidCardCombination();         // Invalid card combination
+    error OtherPlayerAlreadyCommitted();    // Other player has already made an open commit to the challenge
+
+    event PlayerJoined(address playerAddress, string nickname);                                                 // A player has joined the game for any reason
+    event PlayerLeft(address playerAddress);                                                                    // A player has left the game for any reason
+    event PlayerEliminated(address playerAddress);                                                              // Player has lost all of their stars
+    event PlayerCashedOut(address playerAddress);                                                               // Player voluntarily cashes out
+    event ChallengeCommit(address challenger, address challengee);                                              // Challenger has issued a challenge to challengee
+    event OpenCommit(address challenger, address challengee);                                                   // Challengee has made an open commit to challenger's challenge
+    event ChallengerWins(address challenger, uint challengerCard, address challengee, uint challengeeCard);     // Challenger has won the challenge against challengee
+    event ChallengerLoses(address challenger, uint challengerCard, address challengee, uint challengeeCard);    // Challengee has won the challenge against challenger
+    event Tie(address challenger, uint challengerCard, address challengee, uint challengeeCard);                // Challenger and challengee have tied
+    event Misplay(address player, uint card);                                                                   // Player has misplayed a card
+    event WithdrawnChallengeCommit(address challenger, address challengee);                                     // Challenger has withdrawn their challenge to challengee
+    event WithdrawnOpenCommit(address challenger, address challengee);                                          // Challengee has withdrawn their open commit to challenger
+    event OrphanedCommit(address challenger, address challengee);                                               // Player left unresolved commit behind
+    event ChallengerFailedHashOnce(address challenger, address challengee);                                     // Challenger failed to solve hash once
+    event ChallengerFailedHashTwice(address challenger, address challengee);                                    // Challenger failed to solve hash twice (auto-loss of star with no card burnt)
+
+    uint public constant STAR = 0;
+    uint public constant ROCK = 1; 
+    uint public constant PAPER = 2;
+    uint public constant SCISSORS = 3;
 
     struct commit {
         bytes32 hash;
@@ -34,6 +64,13 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
         bool exists;
         bool hashStrike; 
         uint blockNum;
+    }
+
+    struct transferRequest {
+        address from;
+        address to;
+        uint tokenType;
+        uint amount;
     }
 
     enum GameResult {
@@ -45,234 +82,174 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
         Misplay_Challenger_Wins     // Result if the challengee doesn't possess a card of the type they committed
     }
 
-    mapping (address => bool) players;
-    mapping (address => mapping (address => commit)) challenges;
-    mapping (address => uint) challengesCount;
-    mapping (uint => uint) public totals;
+    mapping (address => bool) players;                          // Tracks whether a player is active in the game
+    mapping (address => mapping (uint => uint)) balances;       // Tracks each player's balance of each token type
+    mapping (uint => uint) totals;                              // Tracks the total supply of each token type
+    mapping (address => mapping (address => commit)) commits;   // Tracks each player's commits against other players
+    mapping (address => address[]) commitArray;                 // This is merely used to re-initialize the commits mapping when a player leaves the game
+    mapping (address => uint) commitCount;                      // Tracks the number of games a player is currently committed to
     
-    error AddressAlreadyPlaying();
-    error PlayerNotFound();
-    error PlayerHasNoStars();
-    error PlayerHasNoCards();
-    error PlayerHasNoUncommittedCards();
-    error PlayerHasNoUncommittedStars();
-    error PlayerStillHasStars();
-    error PlayerStillHasCards();
-    error InsufficientStars();
-    error NoSelfChallenge();
-    error PlayerAlreadyChallenged();
-    error NotYetChallenged();
-    error MustBeRockPaperOrScissors();
-    error NeedCopyOfCard();
-    error NoOpenCommit();
-    error InvalidCardCombination();
-    error OtherPlayerAlreadyCommitted();
-
-    event PlayerJoined(address playerAddress, string nickname); // A player has joined the game for any reason
-    event PlayerLeft(address playerAddress); // A player has left the game for any reason
-    event PlayerEliminated(address playerAddress);  // Player has lost all of their stars
-    event PlayerCashedOut(address playerAddress); // Player voluntarily cashes out
-    
-    event ChallengeCommit(address challenger, address challengee); // Challenger has issued a challenge to challengee
-    event OpenCommit(address challenger, address challengee); // Challengee has made an open commit to challenger's challenge
-
-    event ChallengerWins(address challenger, uint challengerCard, address challengee, uint challengeeCard); // Challenger has won the challenge against challengee
-    event ChallengerLoses(address challenger, uint challengerCard, address challengee, uint challengeeCard); // Challengee has won the challenge against challenger
-    event Tie(address challenger, uint challengerCard, address challengee, uint challengeeCard); // Challenger and challengee have tied
-    event Misplay(address player, uint card); // Player has misplayed a card
-
-    event WithdrawnChallengeCommit(address challenger, address challengee); // Challenger has withdrawn their challenge to challengee
-    event WithdrawnOpenCommit(address challenger, address challengee); // Challengee has withdrawn their open commit to challenger
-    
-    event OrphanedChallenge(address challenger, address challengee); // Player left unresolved challenges behind
-    event ChallengerFailedHashOnce(address challenger, address challengee); // Challenger failed to solve hash once
-    event ChallengerFailedHashTwice(address challenger, address challengee); // Challenger failed to solve hash twice (auto-loss of star with no card burnt)
-
-    event TokenTransfer(address from, address to, uint256 id, uint256 amount); // ERC1155 Transfer event
-
     bytes emptyData = "";
     string emptyString = "";
 
+    function incrementToken(address player, uint256 id, uint256 amount) internal {
+        balances[player][id] += amount;
+        totals[id] += amount;
+    }
+
+    function decrementToken(address player, uint256 id, uint256 amount) internal {
+        balances[player][id] -= amount;
+        totals[id] -= amount;
+    }
+
+    // This function is written from the perspective of the challenger
+    function issueCommit(address challengee, bytes32 hash) internal {
+        commits[msg.sender][challengee].hash = hash;                        // Add hash to commits mapping
+        commits[msg.sender][challengee].exists = true;                      // Set commits mapping to exist
+        commitArray[msg.sender].push(challengee);                           // Add challengee to array of addresses committed against
+        commitCount[msg.sender] += 1;                                       // Increment commitCount for challenger 
+
+        // TODO: Add blocknumber here for time-based challenge resolution? 
+    }
+
+    // This function is written from the perspective of the challengee
+    function issueCommit(address challenger, uint cardType) internal {
+        // Set commits mapping challengee -> challenger -> cardType
+        commits[msg.sender][challenger].cardType = cardType;                // Add cardType to commits mapping
+        commits[msg.sender][challenger].exists = true;                      // Set commits mapping to exist
+        commitArray[msg.sender].push(challenger);                           // Add challenger to array of addresses committed against 
+        commitCount[msg.sender] += 1;                                       // Increment commitCount for challengee 
+
+        // TODO: Add blocknumber here for time-based challenge resolution? 
+    }
+
+    function removeCommit(address fromPlayer, address toPlayer) internal {
+        if (commits[fromPlayer][toPlayer].exists){
+            delete commits[fromPlayer][toPlayer];
+            commitCount[fromPlayer] -= 1;
+        }
+    }
+
     function startGame(string memory nickname) public /* payable */ {
-        // Check payment
-        // require(msg.value >= 0.1 ether);
-        // Ensure that address is not currently playing the game
-        if (players[msg.sender] == true) {revert AddressAlreadyPlaying();}
-        // Log the address as playing the game
-        players[msg.sender] = true; 
-        // Set challenges count to zero;
-        challengesCount[msg.sender] = 0;
-
-
-        // Emit event
+        // require(msg.value >= 0.1 ether); // Check payment
+        if (players[msg.sender] == true) {revert AddressAlreadyPlaying();}  // Ensure that address is not currently playing the game
+        players[msg.sender] = true;                                         // Log the address as playing the game
+        for (uint i=0; i<commitArray[msg.sender].length; i++){
+            removeCommit(msg.sender, commitArray[msg.sender][i]);           // Delete any existing outgoing commits
+            removeCommit(commitArray[msg.sender][i], msg.sender);           // Delete any existing incoming commits
+        }
+        delete commitCount[msg.sender];                                     // Delete commits count
         emit PlayerJoined(msg.sender, nickname);
 
-        // Mint new set of cards
-        mint(msg.sender, ROCK, 4, emptyData);
-        mint(msg.sender, PAPER, 4, emptyData);
-        mint(msg.sender, SCISSORS, 4, emptyData);
-        
-        // Mint new set of stars
-        mint(msg.sender, STAR, 3, emptyData);
+        // Give player fresh set of cards and stars
+        incrementToken(msg.sender, STAR, 3);
+        incrementToken(msg.sender, ROCK, 4);
+        incrementToken(msg.sender, PAPER, 4);
+        incrementToken(msg.sender, SCISSORS, 4);
     }
 
     function gameOverCheck(address player) internal {
-        //Check if player has no stars remaining
-        if (balanceOf(player, STAR) == 0){
-            // DOUBLE check!
-            if (balanceOf(player, STAR) > 0) {revert PlayerStillHasStars();}
+        if (balanceOf(player, STAR) < 1){                                   //Check if player has no stars remaining
+            decrementToken(player, ROCK, balanceOf(player, ROCK));          // Remove remaining rock cards
+            decrementToken(player, PAPER, balanceOf(player, PAPER));        // Remove remaining paper cards
+            decrementToken(player, SCISSORS, balanceOf(player, SCISSORS));  // Remove remaining scissors cards
+            players[player] = false;                                        // Deregister player
+            for (uint i=0; i<commitArray[player].length; i++){
+                removeCommit(player, commitArray[player][i]);               // Delete any existing outgoing commits
+                removeCommit(commitArray[player][i], player);               // Delete any existing incoming commits
+            }
+            delete commitCount[msg.sender];                                 // Delete any existing commits count                                                                
 
-            //Burn remaining cards
-            _burn(player, ROCK, balanceOf(player, ROCK));
-            _burn(player, PAPER, balanceOf(player, PAPER));
-            _burn(player, SCISSORS, balanceOf(player, SCISSORS));
-
-
-            players[player] = false;
             emit PlayerEliminated(player);
             emit PlayerLeft(player);
         }
     }
 
     function cashOut() public {
-        // Check that player has no cards remaining
-        if (totalCards(msg.sender) > 0) {revert PlayerStillHasCards();}
-        // Check that player has 3 or more stars remaining
-        if (balanceOf(msg.sender, STAR) < 3) {revert InsufficientStars();}
-
-        // TODO: Implement cashing out stars from the contract's account -- 0.03 Eth per star on a 0.1 Eth buyin?
-        // For now, just burn the remaining stars
-        _burn(msg.sender, STAR, balanceOf(msg.sender, STAR)); 
-
-        players[msg.sender] = false;
+        if (totalCards(msg.sender) > 0) {revert PlayerStillHasCards();}     // Check that player has no cards remaining
+        if (balanceOf(msg.sender, STAR) < 3) {revert InsufficientStars();}  // Check that player has 3 or more stars remaining
+        decrementToken(msg.sender, STAR, balanceOf(msg.sender, STAR));      // Remove remaining stars
+        players[msg.sender] = false;                                        // Deregister player
+        for (uint i=0; i<commitArray[msg.sender].length; i++){
+            removeCommit(msg.sender, commitArray[msg.sender][i]);           // Delete any existing outgoing commits
+            removeCommit(commitArray[msg.sender][i], msg.sender);           // Delete any existing incoming commits
+        }
         emit PlayerCashedOut(msg.sender);
         emit PlayerLeft(msg.sender);
     }
 
     // This function is written from the perspective of the challenger
     function challengeCommit(address challengee, bytes32 hash) public {
-
-        // Check that player is in the game 
-        if (players[msg.sender] == false) {revert PlayerNotFound();}
-
-        // Check that challenger and challengee are different accounts
-        if (msg.sender == challengee) {revert NoSelfChallenge();}
-
-        // Check that challenger has at least one star and at least one card remaining
-        if (balanceOf(msg.sender, STAR) == 0) {revert PlayerHasNoStars();}
-        if (totalCards(msg.sender) == 0) {revert PlayerHasNoCards();}
-        
-        // Check that challengee has at least one star and at least one card remaining
-        if (balanceOf(challengee, STAR) == 0) {revert PlayerHasNoStars();}
-        if (totalCards(challengee) == 0) {revert PlayerHasNoCards();}
-
-        // Check that challenger has at least one card and at least one star not already committed to a challenge
-        if ((totalCards(msg.sender) - challengesCount[msg.sender]) < 1) {revert PlayerHasNoUncommittedCards();}
-        if ((balanceOf(msg.sender, STAR) - challengesCount[msg.sender]) < 1) {revert PlayerHasNoUncommittedStars();}
-
-        // Check that challengee has at least one card and at least one star not already committed to a challenge
-        if ((totalCards(challengee) - challengesCount[challengee]) < 1) {revert PlayerHasNoUncommittedCards();}
-        if ((balanceOf(challengee, STAR) - challengesCount[challengee]) < 1) {revert PlayerHasNoUncommittedStars();}
-
-        // Check that challengee doesn't have an open challenge against challenger and vise versa
-        if (challenges[challengee][msg.sender].exists) {revert PlayerAlreadyChallenged();}
-        if (challenges[msg.sender][challengee].exists) {revert PlayerAlreadyChallenged();}
-
-        // Set challenges mapping challenger -> challengee -> cardType and increment challengeCount for challenger 
-        challenges[msg.sender][challengee].hash = hash;
-        challenges[msg.sender][challengee].exists = true;
-        challengesCount[msg.sender] += 1;
-
+        if (players[msg.sender] == false) {revert PlayerNotFound();}                    // Check that player is in the game 
+        if (msg.sender == challengee) {revert NoSelfChallenge();}                       // Check that challenger and challengee are different accounts
+        if ((totalCards(msg.sender) - commitCount[msg.sender]) < 1) {revert PlayerHasNoUncommittedCards();}         // Check for uncommitted challenger card
+        if ((totalCards(challengee) - commitCount[challengee]) < 1) {revert PlayerHasNoUncommittedCards();}         // Check for uncommitted challengee card
+        if ((balanceOf(msg.sender, STAR) - commitCount[msg.sender]) < 1) {revert PlayerHasNoUncommittedStars();}    // Check for uncommitted challenger star
+        if ((balanceOf(challengee, STAR) - commitCount[challengee]) < 1) {revert PlayerHasNoUncommittedStars();}    // Check for uncommitted challengee star
+        if (commits[challengee][msg.sender].exists) {revert PlayerAlreadyChallenged();} // Check for open challenge against challengee
+        if (commits[msg.sender][challengee].exists) {revert PlayerAlreadyChallenged();} // Check for open challenge against challenger
+        issueCommit(challengee, hash);                                                  // Set commit mapping and increment commitCount for challenger 
         emit ChallengeCommit(msg.sender, challengee);
     }
 
     // This function is written from the perspective of the challengee
     function openCommit(address challenger, uint cardType) public{
-
-        // Check that player is in the game 
-        if (players[msg.sender] == false) {revert PlayerNotFound();}
-
-        // Check that challengee has been challenged by challenger
-        if (!challenges[challenger][msg.sender].exists) {revert NotYetChallenged();}
-
-        // Check to see if challenger is still in the game. If they are not, withdraw the challenge and end function early
-        if (players[challenger] == false){
-            delete challenges[challenger][msg.sender];
-            emit OrphanedChallenge(challenger, msg.sender);
+        if (players[msg.sender] == false) {revert PlayerNotFound();}                // Check that player is in the game 
+        if (msg.sender == challenger) {revert NoSelfChallenge();}                   // Check that challenger and challengee are different accounts
+        if (!commits[challenger][msg.sender].exists) {revert NotYetChallenged();}   // Check that challengee has been challenged by challenger
+        if (cardType < 1 || cardType > 3) {revert MustBeRockPaperOrScissors();}     // Check that cardType is one of ROCK (1), PAPER (2), SCISSORS (3)
+        if (msg.sender == challenger) {revert NoSelfChallenge();}                   // Check that challenger and challengee are different accounts
+        if (balanceOf(msg.sender, cardType) < 1) {revert NeedCopyOfCard();}         // Check that challengee has at least one copy of the card to be committed
+        if ((totalCards(msg.sender) - commitCount[msg.sender]) < 1) {revert PlayerHasNoUncommittedCards();}         // Check challengee's uncommitted cards
+        if ((balanceOf(msg.sender, STAR) - commitCount[msg.sender]) < 1) {revert PlayerHasNoUncommittedStars();}    // Check challengee's uncommitted stars
+        if (players[challenger] == false){                                          // Check to see if challenger is still in the game.
+            removeCommit(challenger, msg.sender);                                   // If they are not, withdraw the challenge and end function early
+            removeCommit(msg.sender, challenger);
+            emit OrphanedCommit(challenger, msg.sender);
             return ();
         }
-
-        // Check that cardType is one of ROCK (1), PAPER (2), SCISSORS (3)
-        if(cardType < 1 || cardType > 3) {revert MustBeRockPaperOrScissors();}
-
-        // Check that challenger and challengee are different accounts
-        if (msg.sender == challenger) {revert NoSelfChallenge();}
-
-        // Check that challengee has at least one card and at least one star not already committed to a challenge
-        if ((totalCards(msg.sender) - challengesCount[msg.sender]) < 1) {revert PlayerHasNoUncommittedCards();}
-        if ((balanceOf(msg.sender, STAR) - challengesCount[msg.sender]) < 1) {revert PlayerHasNoUncommittedStars();}
-
-        // Check that challengee has at least one copy of the card they're trying to commit
-        if(balanceOf(msg.sender, cardType) < 1) {revert NeedCopyOfCard();}
-
-        // Set challenges mapping challengee -> challenger -> cardType
-        challenges[msg.sender][challenger].cardType = cardType;
-        challenges[msg.sender][challenger].exists = true;
-
-        // Increment challengeCount for challengee 
-        challengesCount[msg.sender] += 1;
-
+        issueCommit(challenger, cardType);                                           // Set commit mapping and increment commitCount for challengee
         emit OpenCommit(challenger, msg.sender);
     }
 
     // Written from the perspective of the challenger, who must now reveal their card by proving their hash
     function reveal(address challengee, uint cardType, string calldata salt) public {
+        if (msg.sender == challengee) {revert NoSelfChallenge();}                   // Check that challenger isn't revealing against themselves
+        if (players[msg.sender] == false) {revert PlayerNotFound();}                // Check that player is in the game 
+        if (cardType < 1 || cardType > 3) {revert MustBeRockPaperOrScissors();}     // Check that cardType is one of ROCK (1), PAPER (2), SCISSORS (3)
+        if (!commits[challengee][msg.sender].exists) {revert NoOpenCommit();}       // Check that challengee has made an open commit to challenger's challenge
+        if (!commits[msg.sender][challengee].exists) {revert NotYetChallenged();}   // Check that challenger has challenged challengee
 
-        // Check that player is in the game 
-        if (players[msg.sender] == false) {revert PlayerNotFound();}
-
-        // Check that cardType is one of ROCK (1), PAPER (2), SCISSORS (3)
-        if(cardType < 1 || cardType > 3) {revert MustBeRockPaperOrScissors();}
-
-        // Check to ensure that an open commit from the challengee exists against the challenger's challenge (which also needs to exist)
-        if(!challenges[challengee][msg.sender].exists) {revert NotYetChallenged();}
-        if(!challenges[msg.sender][challengee].exists) {revert NoOpenCommit();}
-
-        // Check to see if challengee is still in the game. If they are not, withdraw the challenge and end function early
-        if (players[challengee] == false){
-            delete challenges[challengee][msg.sender];
-            delete challenges[msg.sender][challengee];
-            challengesCount[msg.sender] -= 1;
-            emit OrphanedChallenge(msg.sender, challengee);
+        if (players[challengee] == false){                                          // Check to see if challengee is still in the game. 
+            removeCommit(msg.sender, challengee);                                   // If they are not, withdraw the challenge and end function early.
+            removeCommit(challengee, msg.sender);
+            emit OrphanedCommit(msg.sender, challengee);
             return ();
         }
-
-        // Check that challenger isn't revealing against themselves
-        if (msg.sender == challengee) {revert NoSelfChallenge();}
 
         // Check that challenger's hash is solved using the card type and salt.
-        // If they fail to do so, they get a hash strike and the function returns.
         uint challengerCard;
 
-        if (hashCommit(cardType, salt) == challenges[msg.sender][challengee].hash && balanceOf(msg.sender, cardType) > 0){
-            challengerCard = cardType;
-        } else if (!challenges[msg.sender][challengee].hashStrike) {
-            challenges[msg.sender][challengee].hashStrike = true;
-            emit ChallengerFailedHashOnce(msg.sender, challengee);
+        if (
+            hashCommit(cardType, salt) == commits[msg.sender][challengee].hash && 
+            balanceOf(msg.sender, cardType) > 0
+        ){
+            challengerCard = cardType;                                              // If the hash matches, accept the card type as the challenger's card
+        } else if (!commits[msg.sender][challengee].hashStrike) {
+            commits[msg.sender][challengee].hashStrike = true;                      // If the hash doesn't match, strike the hash once,
+            emit ChallengerFailedHashOnce(msg.sender, challengee);                  // and then end the function early
             return ();
         } else {
-            emit ChallengerFailedHashTwice(msg.sender, challengee);
-            challengerCard = 0;
+            emit ChallengerFailedHashTwice(msg.sender, challengee);                 // If the hash doesn't match and has already been struck once,
+            challengerCard = 0;                                                     // Set challengerCard to 0, which indicates a misplay 
         }
         
-        uint challengeeCard = challenges[challengee][msg.sender].cardType;
+        uint challengeeCard = commits[challengee][msg.sender].cardType;             // Get the challengee's card
         
         GameResult gameResult;
 
-        // Ensure that challengee is in possession of the card they committed; 
-        // if they're not, change card type to 0, representing a misplay.
-        if (balanceOf(msg.sender, challengerCard) < 1)  {challengerCard = 0;}
-        if (balanceOf(challengee, challengeeCard) < 1)  {challengeeCard = 0;}
+        if (balanceOf(msg.sender, challengerCard) < 1)  {challengerCard = 0;}       // Ensure that challenger is in possession of a card of the type they committed
+        if (balanceOf(challengee, challengeeCard) < 1)  {challengeeCard = 0;}       // Ensure that challengee is in possession of a card of the type they committed
 
         // Determine Winner
         if      (challengerCard == 0 && challengeeCard == 0)            {gameResult = GameResult.Misplay_Tie;}
@@ -287,30 +264,31 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
         else if (challengerCard == SCISSORS && challengeeCard == ROCK)  {gameResult = GameResult.Challenger_Loses;}
         else {revert InvalidCardCombination();}
 
-        // If the outcome is legitimate, burn both cards used, otherwise, only burn the legit cards.
-
-        if      (gameResult == GameResult.Misplay_Challenger_Loses)     {_burn(challengee, challengeeCard, 1); emit Misplay(msg.sender, challengerCard);}
-        else if (gameResult == GameResult.Misplay_Challenger_Wins)      {_burn(msg.sender, challengerCard, 1); emit Misplay(challengee, challengeeCard);}
+        // CARD HANDLING:
+        // If the outcome is legitimate, burn both cards used, otherwise, only burn the legit card.
+        if      (gameResult == GameResult.Misplay_Challenger_Loses)     {decrementToken(challengee, challengeeCard, 1); emit Misplay(msg.sender, challengerCard);}
+        else if (gameResult == GameResult.Misplay_Challenger_Wins)      {decrementToken(msg.sender, challengerCard, 1); emit Misplay(challengee, challengeeCard);}
         else {
-            _burn(msg.sender, challengerCard, 1);
-            _burn(challengee, challengeeCard, 1);
+            decrementToken(msg.sender, challengerCard, 1);
+            decrementToken(challengee, challengeeCard, 1);
         }
 
+        // STAR HANDLING:
         // If there's a winner, move one star from loser to winner
         if (gameResult == GameResult.Challenger_Loses || gameResult == GameResult.Misplay_Challenger_Loses){
-            _burn(msg.sender, STAR, 1);
-            mint(challengee, STAR, 1, emptyData);
+            decrementToken(msg.sender, STAR, 1);
+            incrementToken(challengee, STAR, 1);
             emit ChallengerLoses(msg.sender, challengerCard, challengee, challengeeCard);
         }
         if (gameResult == GameResult.Challenger_Wins || gameResult == GameResult.Misplay_Challenger_Wins){
-            _burn(challengee, STAR, 1);
-            mint(msg.sender, STAR, 1, emptyData);
+            decrementToken(challengee, STAR, 1);
+            incrementToken(msg.sender, STAR, 1);
             emit ChallengerWins(msg.sender, challengerCard, challengee, challengeeCard);
         }
         // If the result is a double misplay, burn one star from both participants.
         if (gameResult == GameResult.Misplay_Tie) {
-            _burn(msg.sender, STAR, 1);
-            _burn(challengee, STAR, 1);
+            decrementToken(msg.sender, STAR, 1);
+            decrementToken(challengee, STAR, 1);
             emit Misplay(msg.sender, challengerCard);
             emit Misplay(challengee, challengeeCard);
         }
@@ -319,13 +297,9 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
             emit Tie(msg.sender, challengerCard, challengee, challengeeCard);
         }
 
-        // Set challenges mapping for both address orderings to false or 0??
-        delete challenges[msg.sender][challengee];
-        delete challenges[challengee][msg.sender];
-
-        // Decrement challengeCount for both participants
-        challengesCount[msg.sender] -= 1;
-        challengesCount[challengee] -= 1;
+        // Remove both commits
+        removeCommit(msg.sender, challengee);
+        removeCommit(challengee, msg.sender);
 
         // Check for Game Over for both players
         gameOverCheck(msg.sender);
@@ -333,56 +307,48 @@ contract RRPS is ERC1155, Ownable, BalanceCheckers {
     }
 
     function withdrawChallenge(address challengee) public {
-        
-        // Check that player has an ongoing challenge against another player
-        if (!challenges[msg.sender][challengee].exists) {revert NotYetChallenged();}
-
-        // Ensure that the other player hasn't yet made an open commit to the challenge
-        if(challenges[challengee][msg.sender].exists) {revert OtherPlayerAlreadyCommitted();}
-
-        // Withdraw the challenge by deregistering and decrementing challengesCount
-        delete challenges[msg.sender][challengee];
-        challengesCount[msg.sender] -= 1;
+        if (commits[challengee][msg.sender].exists) {revert OtherPlayerAlreadyCommitted();}     // Ensure no open commit from other player yet exists
+        removeCommit(msg.sender, challengee);                                                   // Remove the commit
         emit WithdrawnChallengeCommit(msg.sender, challengee);
     }
 
     function withdrawOpenCommit(address challenger) public {
-
-        // Check that sender (challengee) has made an open commit against another player's ongoing challenge
-        if(!challenges[msg.sender][challenger].exists) {revert NotYetChallenged();}
-
-        // Withdraw the open commit by deregistering and decrementing challengesCount
-        delete challenges[msg.sender][challenger];
-        challengesCount[msg.sender] -= 1;
+        removeCommit(challenger, msg.sender);                                                   // Remove the open commit
         emit WithdrawnOpenCommit(challenger, msg.sender);
     }
 
-    function setURI(string memory newuri) internal {
-        _setURI(newuri);
-    }
-
-    function mint(address account, uint256 id, uint256 amount, bytes memory data) internal {
-        _mint(account, id, amount, data);
-        totals[id] += amount;
-    }
-
-    function burn(address from, uint256 id, uint256 amount) internal {
-        _burn(from, id, amount);
-        totals[id] -= amount;
-    }
-
-    // Pure hash function
     function hashCommit(uint cardType, string calldata salt) public view returns(bytes32) {
         if(cardType < 1 || cardType > 3) {revert MustBeRockPaperOrScissors();}
         return keccak256(abi.encodePacked(msg.sender, cardType, salt));
     }
 
-    // Transfer Overrides
+    function contractBalance() public view returns(uint256) {
+        return(address(this).balance);
+    }
 
-    function safeTransferFrom(address from, address to, uint256 id, uint256 amount, bytes memory data) public override {
-        _safeTransferFrom(from, to, id, amount, data);
+    function balanceOf(address account, uint id) public view returns(uint256) {
+        return(balances[account][id]);
     }
-    function safeBatchTransferFrom(address from, address to, uint256[] memory ids, uint256[] memory amounts, bytes memory data) public override {
-        _safeBatchTransferFrom(from, to, ids, amounts, data);
+    
+    function balanceOf(address account) public view returns(uint256, uint256, uint256, uint256) {
+        return (
+            balanceOf(account, 0),
+            balanceOf(account, 1),
+            balanceOf(account, 2),
+            balanceOf(account, 3)
+        );
     }
+
+    function balanceOf() public view returns(uint256, uint256, uint256, uint256) {
+        return(balanceOf(msg.sender));
+    }
+
+    function totalCards(address player) public view returns (uint256) {
+        return(
+            balanceOf(player, ROCK) + 
+            balanceOf(player, PAPER) + 
+            balanceOf(player, SCISSORS)
+        );
+    }
+
 }
