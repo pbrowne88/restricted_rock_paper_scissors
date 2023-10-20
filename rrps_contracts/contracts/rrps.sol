@@ -56,10 +56,10 @@ contract RRPS is Ownable {
     event TransferRequest(address requestSender, address requestee, uint tokenType, uint amount);               // Player has requested a token transfer 
     event TransferApproved(address requestSender, address requestee, uint tokenType, uint amount);              // Player has approved a token transfer           
 
-    uint public constant STAR = 0;
-    uint public constant ROCK = 1; 
-    uint public constant PAPER = 2;
-    uint public constant SCISSORS = 3;
+    uint constant STAR = 0;
+    uint constant ROCK = 1; 
+    uint constant PAPER = 2;
+    uint constant SCISSORS = 3;
 
     struct commit {
         bytes32 hash;
@@ -340,6 +340,7 @@ contract RRPS is Ownable {
             decrementToken(msg.sender, commits[msg.sender][challenger].cardType, 1);// Challengee burns their card; challenger does not.
             removeCommit(msg.sender, challenger);                                   // Remove the open commit
             removeCommit(challenger, msg.sender);                                   // Remove the initial commit
+            gameOverCheck(challenger);
             emit ChallengerLoses(challenger, commits[challenger][msg.sender].cardType, msg.sender, commits[msg.sender][challenger].cardType);
         }
     }
@@ -402,5 +403,6 @@ contract RRPS is Ownable {
         incrementToken(requestSender, transferRequests[requestSender].tokenType, transferRequests[requestSender].amount);   // Increment requester's token balance
         decrementToken(msg.sender, transferRequests[requestSender].tokenType, transferRequests[requestSender].amount);      // Decrement requestee's token balance
         emit TransferApproved(requestSender, msg.sender, transferRequests[requestSender].tokenType, transferRequests[requestSender].amount); 
+        gameOverCheck(msg.sender);
     }
 }
