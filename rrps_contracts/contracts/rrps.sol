@@ -16,17 +16,15 @@ TODO LIST:
   players can't commit to a challenge with a card they don't have, and so that players
   can't trade away cards they (might) have committed to a challenge.
 
-- Implement trading logic ** DONE, BUT UNTESTED **
+- Test trading logic
 
 */
 
-contract RRPS is Ownable {
+contract RRPS {
 
     error AddressAlreadyPlaying();          // Address is already playing the game
     error PlayerNotFound();                 // Address is not currently playing the game
-    error PlayerHasNoStars();               // Player has no stars remaining
-    error PlayerHasNoCards();               // Player has no cards remaining
-    error InsufficientUncommittedTokens();   // Player has insufficient tokens remaining that aren't already committed to a challenge
+    error InsufficientUncommittedTokens();  // Player has insufficient tokens remaining that aren't already committed to a challenge
     error PlayerStillHasCards();            // Player still has cards remaining
     error InsufficientStars();              // Player has less than 3 stars remaining
     error NoSelfChallenge();                // Player cannot challenge themselves
@@ -44,26 +42,28 @@ contract RRPS is Ownable {
     event PlayerCashedOut(address playerAddress);                                                               // Player voluntarily cashes out
     event ChallengeCommit(address challenger, address challengee);                                              // Challenger has issued a challenge to challengee
     event OpenCommit(address challenger, address challengee);                                                   // Challengee has made an open commit to challenger's challenge
-    event ChallengerWins(address challenger, uint challengerCard, address challengee, uint challengeeCard);     // Challenger has won the challenge against challengee
-    event ChallengerLoses(address challenger, uint challengerCard, address challengee, uint challengeeCard);    // Challengee has won the challenge against challenger
-    event Tie(address challenger, uint challengerCard, address challengee, uint challengeeCard);                // Challenger and challengee have tied
-    event Misplay(address player, uint card);                                                                   // Player has misplayed a card
+    event ChallengerWins(address challenger, int8 challengerCard, address challengee, int8 challengeeCard);     // Challenger has won the challenge against challengee
+    event ChallengerLoses(address challenger, int8 challengerCard, address challengee, int8 challengeeCard);    // Challengee has won the challenge against challenger
+    event Tie(address challenger, int8 challengerCard, address challengee, int8 challengeeCard);                // Challenger and challengee have tied
+    event Misplay(address player, int8 card);                                                                   // Player has misplayed a card
     event WithdrawnChallengeCommit(address challenger, address challengee);                                     // Challenger has withdrawn their challenge to challengee
     event WithdrawnOpenCommit(address challenger, address challengee);                                          // Challengee has withdrawn their open commit to challenger
+    event CommitCreated(address player1, address player2);                                                      // Commit has been created for any reason
+    event CommitRemoved(address player1, address player2);                                                      // Commit has been removed for any reason
     event OrphanedCommit(address challenger, address challengee);                                               // Player left unresolved commit behind
     event ChallengerFailedHashOnce(address challenger, address challengee);                                     // Challenger failed to solve hash once
     event ChallengerFailedHashTwice(address challenger, address challengee);                                    // Challenger failed to solve hash twice (auto-loss of star with no card burnt)
-    event TransferRequest(address requestSender, address requestee, uint tokenType, uint amount);               // Player has requested a token transfer 
-    event TransferApproved(address requestSender, address requestee, uint tokenType, uint amount);              // Player has approved a token transfer           
+    event TransferRequest(address requestSender, address requestee, int8 tokenType, uint8 amount);               // Player has requested a token transfer 
+    event TransferApproved(address requestSender, address requestee, int8 tokenType, uint8 amount);              // Player has approved a token transfer           
 
-    uint constant STAR = 0;
-    uint constant ROCK = 1; 
-    uint constant PAPER = 2;
-    uint constant SCISSORS = 3;
+    int8 constant STAR = 0;
+    int8 constant ROCK = 1; 
+    int8 constant PAPER = 2;
+    int8 constant SCISSORS = 3;
 
     struct commit {
         bytes32 hash;
-        uint cardType;
+        int8 cardType;
         bool exists;
         bool hashStrike; 
         uint blockNum;
@@ -71,8 +71,8 @@ contract RRPS is Ownable {
 
     struct transferRequest {
         address requestee;
-        uint tokenType;
-        uint amount;
+        int8 tokenType;
+        uint8 amount;
     }
 
     enum GameResult {
@@ -85,22 +85,29 @@ contract RRPS is Ownable {
     }
 
     mapping (address => bool) players;                          // Tracks whether a player is active in the game
-    mapping (address => mapping (uint => uint)) balances;       // Tracks each player's balance of each token type
-    mapping (uint => uint) totals;                              // Tracks the total supply of each token type
+    mapping (address => mapping (int8 => uint)) balances;       // Tracks each player's balance of each token type
+    mapping (int8 => uint) totals;                              // Tracks the total supply of each token type
     mapping (address => mapping (address => commit)) commits;   // Tracks each player's commits against other players
     mapping (address => address[]) commitArray;                 // This is merely used to re-initialize the commits mapping when a player leaves the game
-    mapping (address => uint) commitCount;                      // Tracks the number of games a player is currently committed to
+    mapping (address => uint8) commitCount;                      // Tracks the number of games a player is currently committed to
     mapping (address => transferRequest) transferRequests;      // Tracks transfer requests
-    
-    bytes emptyData = "";
-    string emptyString = "";
 
-    function incrementToken(address player, uint256 id, uint256 amount) internal {
+    function incrementToken(address player, int8 id, uint amount) internal {
+        require(id >= 0 || id <= 3, "Invalid token ID.");
         balances[player][id] += amount;
         totals[id] += amount;
     }
 
-    function decrementToken(address player, uint256 id, uint256 amount) internal {
+    function decrementToken(address player, int8 id, uint amount) internal {
+        require(id >= 0 || id <= 3, "Invalid token ID.");
+        require(balances[player][id] >= amount, "Token balance cannot go below zero.");
+        balances[player][id] -= amount;
+        totals[id] -= amount;
+    }
+
+    function decrementCard(address player, int8 id, uint amount) internal {
+        require(id >= 1 || id <= 3, "Invalid card ID.");
+        require(balances[player][id] >= amount, "Token balance cannot go below zero.");
         balances[player][id] -= amount;
         totals[id] -= amount;
     }
@@ -112,22 +119,25 @@ contract RRPS is Ownable {
         commits[msg.sender][challengee].blockNum = block.number;            // Add blocknumber 
         commitArray[msg.sender].push(challengee);                           // Add challengee to array of addresses committed against
         commitCount[msg.sender] += 1;                                       // Increment commitCount for challenger 
+        emit CommitCreated(msg.sender, challengee);
     }
 
     // This function is written from the perspective of the challengee
-    function issueCommit(address challenger, uint cardType) internal {
+    function issueCommit(address challenger, int8 cardType) internal {
         // Set commits mapping challengee -> challenger -> cardType
         commits[msg.sender][challenger].cardType = cardType;                // Add cardType to commits mapping
         commits[msg.sender][challenger].exists = true;                      // Set commits mapping to exist
         commits[msg.sender][challenger].blockNum = block.number;            // Add blocknumber 
         commitArray[msg.sender].push(challenger);                           // Add challenger to array of addresses committed against 
         commitCount[msg.sender] += 1;                                       // Increment commitCount for challengee 
+        emit CommitCreated(msg.sender, challenger);
     }
 
     function removeCommit(address fromPlayer, address toPlayer) internal {
         if (commits[fromPlayer][toPlayer].exists){
             delete commits[fromPlayer][toPlayer];
             commitCount[fromPlayer] -= 1;
+            emit CommitRemoved(fromPlayer, toPlayer);
         }
     }
 
@@ -135,19 +145,17 @@ contract RRPS is Ownable {
         // require(msg.value >= 0.1 ether); // Check payment
         if (players[msg.sender] == true) {revert AddressAlreadyPlaying();}  // Ensure that address is not currently playing the game
         players[msg.sender] = true;                                         // Log the address as playing the game
-        for (uint i=0; i<commitArray[msg.sender].length; i++){
+        for (uint8 i=0; i<commitArray[msg.sender].length; i++){
             removeCommit(msg.sender, commitArray[msg.sender][i]);           // Delete any existing outgoing commits
             removeCommit(commitArray[msg.sender][i], msg.sender);           // Delete any existing incoming commits
         }
         delete commitCount[msg.sender];                                     // Delete commits count
         delete transferRequests[msg.sender];                                // Delete transfer requests
-        emit PlayerJoined(msg.sender, nickname);
-
-        // Give player fresh set of cards and stars
-        incrementToken(msg.sender, STAR, 3);
+        incrementToken(msg.sender, STAR, 3);                                // Give player fresh set of cards and stars
         incrementToken(msg.sender, ROCK, 4);
         incrementToken(msg.sender, PAPER, 4);
         incrementToken(msg.sender, SCISSORS, 4);
+        emit PlayerJoined(msg.sender, nickname);
     }
 
     function gameOverCheck(address player) internal {
@@ -156,7 +164,7 @@ contract RRPS is Ownable {
             decrementToken(player, PAPER, balanceOf(player, PAPER));        // Remove remaining paper cards
             decrementToken(player, SCISSORS, balanceOf(player, SCISSORS));  // Remove remaining scissors cards
             players[player] = false;                                        // Deregister player
-            for (uint i=0; i<commitArray[player].length; i++){
+            for (uint8 i=0; i<commitArray[player].length; i++){
                 removeCommit(player, commitArray[player][i]);               // Delete any existing outgoing commits
                 removeCommit(commitArray[player][i], player);               // Delete any existing incoming commits
             }
@@ -174,7 +182,7 @@ contract RRPS is Ownable {
         decrementToken(msg.sender, STAR, balanceOf(msg.sender, STAR));      // Remove remaining stars
         players[msg.sender] = false;                                        // Deregister player
         delete transferRequests[msg.sender];                                // Delete transfer requests
-        for (uint i=0; i<commitArray[msg.sender].length; i++){
+        for (uint8 i=0; i<commitArray[msg.sender].length; i++){
             removeCommit(msg.sender, commitArray[msg.sender][i]);           // Delete any existing outgoing commits
             removeCommit(commitArray[msg.sender][i], msg.sender);           // Delete any existing incoming commits
         }
@@ -197,7 +205,7 @@ contract RRPS is Ownable {
     }
 
     // This function is written from the perspective of the challengee
-    function openCommit(address challenger, uint cardType) public{
+    function openCommit(address challenger, int8 cardType) public {
         if (players[msg.sender] == false) {revert PlayerNotFound();}                // Check that player is in the game 
         if (msg.sender == challenger) {revert NoSelfChallenge();}                   // Check that challenger and challengee are different accounts
         if (!commits[challenger][msg.sender].exists) {revert NotYetChallenged();}   // Check that challengee has been challenged by challenger
@@ -217,7 +225,7 @@ contract RRPS is Ownable {
     }
 
     // Written from the perspective of the challenger, who must now reveal their card by proving their hash
-    function reveal(address challengee, uint cardType, string calldata salt) public {
+    function reveal(address challengee, int8 cardType, string calldata salt) public {
         if (msg.sender == challengee) {revert NoSelfChallenge();}                   // Check that challenger isn't revealing against themselves
         if (players[msg.sender] == false) {revert PlayerNotFound();}                // Check that player is in the game 
         if (cardType < 1 || cardType > 3) {revert MustBeRockPaperOrScissors();}     // Check that cardType is one of ROCK (1), PAPER (2), SCISSORS (3)
@@ -231,9 +239,10 @@ contract RRPS is Ownable {
             return ();
         }
 
-        // Check that challenger's hash is solved using the card type and salt.
-        uint challengerCard;
+        int8 challengerCard;                                                        // Initialize challenger's card variable
+        int8 challengeeCard = commits[challengee][msg.sender].cardType;             // Get the challengee's card
 
+        // Check that challenger's hash is solved using the card type and salt.
         if (
             hashCommit(cardType, salt) == commits[msg.sender][challengee].hash && 
             balanceOf(msg.sender, cardType) > 0
@@ -245,20 +254,18 @@ contract RRPS is Ownable {
             return ();
         } else {
             emit ChallengerFailedHashTwice(msg.sender, challengee);                 // If the hash doesn't match and has already been struck once,
-            challengerCard = 0;                                                     // Set challengerCard to 0, which indicates a misplay 
+            challengerCard = -1;                                                     // Set challengerCard to 0, which indicates a misplay 
         }
         
-        uint challengeeCard = commits[challengee][msg.sender].cardType;             // Get the challengee's card
-        
-        GameResult gameResult;
 
-        if (balanceOf(msg.sender, challengerCard) < 1)  {challengerCard = 0;}       // Ensure that challenger is in possession of a card of the type they committed
-        if (balanceOf(challengee, challengeeCard) < 1)  {challengeeCard = 0;}       // Ensure that challengee is in possession of a card of the type they committed
+        GameResult gameResult;
+        if (balanceOf(msg.sender, challengerCard) < 1)  {challengerCard = -1;}       // Ensure that challenger is in possession of a card of the type they committed
+        if (balanceOf(challengee, challengeeCard) < 1)  {challengeeCard = -1;}       // Ensure that challengee is in possession of a card of the type they committed
 
         // Determine Winner
-        if      (challengerCard == 0 && challengeeCard == 0)            {gameResult = GameResult.Misplay_Tie;}
-        else if (challengerCard == 0)                                   {gameResult = GameResult.Misplay_Challenger_Loses;}
-        else if (challengeeCard == 0)                                   {gameResult = GameResult.Misplay_Challenger_Wins;}
+        if      (challengerCard == -1 && challengeeCard == -1)          {gameResult = GameResult.Misplay_Tie;}
+        else if (challengerCard == -1)                                  {gameResult = GameResult.Misplay_Challenger_Loses;}
+        else if (challengeeCard == -1)                                  {gameResult = GameResult.Misplay_Challenger_Wins;}
         else if (challengerCard == challengeeCard)                      {gameResult = GameResult.Tie;}
         else if (challengerCard == ROCK && challengeeCard == SCISSORS)  {gameResult = GameResult.Challenger_Wins;}
         else if (challengerCard == SCISSORS && challengeeCard == PAPER) {gameResult = GameResult.Challenger_Wins;}
@@ -270,11 +277,12 @@ contract RRPS is Ownable {
 
         // CARD HANDLING:
         // If the outcome is legitimate, burn both cards used, otherwise, only burn the legit card.
-        if      (gameResult == GameResult.Misplay_Challenger_Loses)     {decrementToken(challengee, challengeeCard, 1); emit Misplay(msg.sender, challengerCard);}
-        else if (gameResult == GameResult.Misplay_Challenger_Wins)      {decrementToken(msg.sender, challengerCard, 1); emit Misplay(challengee, challengeeCard);}
+        if      (gameResult == GameResult.Misplay_Challenger_Loses)     {decrementCard(challengee, challengeeCard, 1);  emit Misplay(msg.sender, challengerCard);}
+        else if (gameResult == GameResult.Misplay_Challenger_Wins)      {decrementCard(msg.sender, challengerCard, 1);  emit Misplay(challengee, challengeeCard);}
+        else if (gameResult == GameResult.Misplay_Tie)                  {emit Misplay(msg.sender, challengerCard);      emit Misplay(challengee, challengeeCard);}
         else {
-            decrementToken(msg.sender, challengerCard, 1);
-            decrementToken(challengee, challengeeCard, 1);
+            decrementCard(msg.sender, challengerCard, 1);
+            decrementCard(challengee, challengeeCard, 1);
         }
 
         // STAR HANDLING:
@@ -293,8 +301,7 @@ contract RRPS is Ownable {
         if (gameResult == GameResult.Misplay_Tie) {
             decrementToken(msg.sender, STAR, 1);
             decrementToken(challengee, STAR, 1);
-            emit Misplay(msg.sender, challengerCard);
-            emit Misplay(challengee, challengeeCard);
+            // Don't emit anything here, as misplay events have already been emitted during the CARD HANDLING step above. 
         }
         // If the result is a legitimate tie, no stars change hands
         if (gameResult == GameResult.Tie) {
@@ -311,17 +318,22 @@ contract RRPS is Ownable {
     }
 
     function withdrawChallenge(address challengee) public {
+        if (!commits[msg.sender][challengee].exists) {revert NotYetChallenged();}               // Ensure that challenger has challenged challengee
         if (commits[challengee][msg.sender].exists) {revert OtherPlayerAlreadyCommitted();}     // Ensure no open commit from other player yet exists
         removeCommit(msg.sender, challengee);                                                   // Remove the commit
         emit WithdrawnChallengeCommit(msg.sender, challengee);
     }
 
-    function withdrawOpenCommit(address challenger) public {
-        if (!commits[msg.sender][challenger].exists) {revert NoOpenCommit();}       // Check that challengee has made an open commit to challenger's challenge
-        if (!commits[challenger][msg.sender].exists) {revert NotYetChallenged();}   // Check that challenger has challenged challengee
-        removeCommit(challenger, msg.sender);                                       // Remove the open commit
-        emit WithdrawnOpenCommit(challenger, msg.sender);
-    }
+    /* 
+    After thinking about it, there shouldn't ever be a valid reason to withdraw an open commit.
+    Either the original challenger reveals, or the challengee uses the timeout win.
+    */
+    // function withdrawOpenCommit(address challenger) public {
+    //     if (!commits[msg.sender][challenger].exists) {revert NoOpenCommit();}       // Check that challengee has made an open commit to challenger's challenge
+    //     if (!commits[challenger][msg.sender].exists) {revert NotYetChallenged();}   // Check that challenger has challenged challengee
+    //     removeCommit(challenger, msg.sender);                                       // Remove the open commit
+    //     emit WithdrawnOpenCommit(challenger, msg.sender);
+    // }
 
     function timeOutWin(address challenger) public {
         if (!commits[msg.sender][challenger].exists) {revert NoOpenCommit();}       // Check that challengee has made an open commit to challenger's challenge
@@ -335,30 +347,32 @@ contract RRPS is Ownable {
         }
 
         if (commits[msg.sender][challenger].blockNum < (block.number - 1 /*Change this to 5000 for deployment*/)){ // Check if 5000 blocks have elapsed
-            decrementToken(challenger, STAR, 1);                                    // Challenger loses a star
-            incrementToken(msg.sender, STAR, 1);                                    // Challengee gains a star
-            decrementToken(msg.sender, commits[msg.sender][challenger].cardType, 1);// Challengee burns their card; challenger does not.
-            removeCommit(msg.sender, challenger);                                   // Remove the open commit
-            removeCommit(challenger, msg.sender);                                   // Remove the initial commit
+            decrementToken(challenger, STAR, 1);                                        // Challenger loses a star
+            incrementToken(msg.sender, STAR, 1);                                        // Challengee gains a star
+            if (balanceOf(msg.sender, commits[msg.sender][challenger].cardType) > 0){   // If challengee has a copy of the card they committed...
+                decrementToken(msg.sender, commits[msg.sender][challenger].cardType, 1);// ... challengee burns their card; challenger does not.
+            }
+            removeCommit(msg.sender, challenger);                                       // Remove the open commit
+            removeCommit(challenger, msg.sender);                                       // Remove the initial commit
             gameOverCheck(challenger);
             emit ChallengerLoses(challenger, commits[challenger][msg.sender].cardType, msg.sender, commits[msg.sender][challenger].cardType);
         }
     }
 
-    function hashCommit(uint cardType, string calldata salt) public view returns(bytes32) {
+    function hashCommit(int8 cardType, string calldata salt) public view returns(bytes32) {
         if(cardType < 1 || cardType > 3) {revert MustBeRockPaperOrScissors();}
         return keccak256(abi.encodePacked(msg.sender, cardType, salt));
     }
 
-    function contractBalance() public view returns(uint256) {
-        return(address(this).balance);
-    }
+    // function contractBalance() public view returns(uint) {
+    //     return(address(this).balance);
+    // }
 
-    function balanceOf(address account, uint id) public view returns(uint256) {
+    function balanceOf(address account, int8 id) public view returns(uint) {
         return(balances[account][id]);
     }
     
-    function balanceOf(address account) public view returns(uint256, uint256, uint256, uint256) {
+    function balanceOf(address account) public view returns(uint, uint, uint, uint) {
         return (
             balanceOf(account, 0),
             balanceOf(account, 1),
@@ -367,11 +381,11 @@ contract RRPS is Ownable {
         );
     }
 
-    function balanceOf() public view returns(uint256, uint256, uint256, uint256) {
+    function balanceOf() public view returns(uint, uint, uint, uint) {
         return(balanceOf(msg.sender));
     }
 
-    function totalCards(address player) public view returns (uint256) {
+    function totalCards(address player) public view returns (uint) {
         return(
             balanceOf(player, ROCK) + 
             balanceOf(player, PAPER) + 
@@ -381,7 +395,7 @@ contract RRPS is Ownable {
 
     // Players can only have one token take request at a time; token take requests ALWAYS send tokens FROM requestee TO requester.
     // In other words, you can request other players give you their tokens, but you cannot request that other players take yours.
-    function requestTokenTake(address requestee, uint id, uint amount) public {
+    function requestTokenTake(address requestee, int8 id, uint8 amount) public {
         if (players[requestee] == false) {revert PlayerNotFound();}                 // Check that requestee is in the game 
         if (requestee == msg.sender) {revert NoSelfChallenge();}                    // Check that requester and requestee are different accounts
         if ((balanceOf(requestee, id) - commitCount[requestee]) < amount) {revert InsufficientUncommittedTokens();} // Check for sufficient uncommitted requestee tokens
