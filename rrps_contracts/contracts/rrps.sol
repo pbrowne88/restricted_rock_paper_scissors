@@ -84,13 +84,13 @@ contract RRPS {
         Misplay_Challenger_Wins     // Result if the challengee doesn't possess a card of the type they committed
     }
 
-    mapping (address => bool) players;                          // Tracks whether a player is active in the game
-    mapping (address => mapping (int8 => uint)) balances;       // Tracks each player's balance of each token type
-    mapping (int8 => uint) totals;                              // Tracks the total supply of each token type
-    mapping (address => mapping (address => commit)) commits;   // Tracks each player's commits against other players
-    mapping (address => address[]) commitArray;                 // This is merely used to re-initialize the commits mapping when a player leaves the game
-    mapping (address => uint8) commitCount;                      // Tracks the number of games a player is currently committed to
-    mapping (address => transferRequest) transferRequests;      // Tracks transfer requests
+    mapping (address => bool) public players;                          // Tracks whether a player is active in the game
+    mapping (address => mapping (int8 => uint)) public balances;       // Tracks each player's balance of each token type
+    mapping (int8 => uint) public totals;                              // Tracks the total supply of each token type
+    mapping (address => mapping (address => commit)) public commits;   // Tracks each player's commits against other players
+    mapping (address => address[]) commitArray;                        // This is merely used to re-initialize the commits mapping when a player leaves the game
+    mapping (address => uint8) public commitCount;                     // Tracks the number of games a player is currently committed to
+    mapping (address => transferRequest) public transferRequests;      // Tracks transfer requests
 
     function incrementToken(address player, int8 id, uint amount) internal {
         require(id >= 0 || id <= 3, "Invalid token ID.");

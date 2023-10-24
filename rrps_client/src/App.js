@@ -31,7 +31,7 @@ function App() {
   const Ganache = new Web3("HTTP://127.0.0.1:7545");
   const accounts = Ganache.eth.getAccounts();
 
-  const contract = new Ganache.eth.Contract(abi, '0x9922E81426e85EbC2e829E75644724F2096B2B44');
+  const contract = new Ganache.eth.Contract(abi, '0x3B74336e8dd246A3f2D6489dCC11Ee1292930932');
 
   async function interact(){
     const providersAccounts = await Ganache.eth.getAccounts();
