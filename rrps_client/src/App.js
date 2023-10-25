@@ -1,8 +1,13 @@
 // App.js
 import React, { useState, useEffect } from 'react';
 import './App.css';
-import Web3 from 'web3';
+import Web3, { ProviderError } from 'web3';
 import Select from 'react-select'
+
+import {InventoryComponent} from './components/inventoryComponent.tsx';
+import {TotalsComponent} from './components/totalsComponent.tsx';
+
+
 const abi = require('./RRPS.json').abi;
 
 const optionsForSelect = [
@@ -11,37 +16,28 @@ const optionsForSelect = [
   { value: 'vanilla', label: 'Vanilla' }
 ]
 
+const Ganache = new Web3("HTTP://127.0.0.1:7545");
+const contract = new Ganache.eth.Contract(abi, '0x3B74336e8dd246A3f2D6489dCC11Ee1292930932');
+const providersAccounts = await Ganache.eth.getAccounts();
 
 function App() {
 
-  const [stars, setStars] = useState(0);
-  const [rock, setRock] = useState(0);
-  const [paper, setPaper] = useState(0);
-  const [scissors, setScissor] = useState(0);
-
-  const [totalStars, setTotalStars] = useState(0);
-  const [totalRock, setTotalRock] = useState(0);
-  const [totalPaper, setTotalPaper] = useState(0);
-  const [totalScissors, setTotalScissor] = useState(0);
 
   const [playerNames, setPlayerNames] = useState([{value: 'No Player', label: 'No Players'}])
   const [playerChoice, setPlayerChoice] = useState(0x00000000);
 
   // Web3 Shit
-  const Ganache = new Web3("HTTP://127.0.0.1:7545");
-  const accounts = Ganache.eth.getAccounts();
+  async function startGameBatch(){
 
-  const contract = new Ganache.eth.Contract(abi, '0x3B74336e8dd246A3f2D6489dCC11Ee1292930932');
-
-  async function interact(){
-    const providersAccounts = await Ganache.eth.getAccounts();
-    // const defaultAccount = providersAccounts[0];
-    // const player2 = providersAccounts[1];
-    // const player3 = providersAccounts[2];
-
-    const nicknames = ['player1', 'player2', 'player3'];
+    const nicknames = ['player1', 'player2', 'player3', 'player1', 'player100'];
 
     for (let i = 0; i < nicknames.length; i++) {
+
+      if (await contract.methods.players(providersAccounts[i]).call()) {
+        console.log(`Address ${providersAccounts[i]} is already playing.`)
+        continue
+      }
+
       try{
         await contract.methods.startGame(nicknames[i]).send({
           from: providersAccounts[i],
@@ -100,38 +96,9 @@ function App() {
   }
 
 
-  async function getBalance(){
-    const providersAccounts = await Ganache.eth.getAccounts();
-    const defaultAccount = providersAccounts[0];
-    const player2 = providersAccounts[1];
-    const player3 = providersAccounts[2];
 
-    try {
-      const inventory = await contract.methods.balanceOf().call({
-        from: player2,
-      }
-      )
-      
-      setStars(parseInt(inventory[0]));
-      setRock(parseInt(inventory[1]));
-      setPaper(parseInt(inventory[2]));
-      setScissor(parseInt(inventory[3]));
-    } catch (error){
-      console.error(error);
-    }
-  }
 
-  async function getTotal(id) {
-    const result = await contract.methods.totals(id).call();
-    return parseInt(result);
-  }
 
-  async function getTotals() {
-    setTotalStars(await getTotal(0));
-    setTotalRock(await getTotal(1));
-    setTotalPaper(await getTotal(2));
-    setTotalScissor(await getTotal(3));
-  }
   
   // Metamask Shit
 
@@ -167,39 +134,9 @@ function App() {
   // }
 
 
-  const InventoryComponent = () => {
-    return (
-      <div className="result" style={{position: 'fixed', bottom: 5, left:5 }}>
-        {
-          <div className="result">
-            <h2>Inventory:</h2>
-            <p>Stars: {stars}</p>
-            <p>Rock: {rock}</p>
-            <p>Paper: {paper}</p>
-            <p>Scissors: {scissors}</p>
-            <button onClick={getBalance}>Update Inventory</button>
-          </div>
-        }
-      </div>
-    );
-  };
 
-  const TotalsComponent = () => {
-    return (
-      <div className="result" style={{position: 'fixed', bottom: 5, right:5 }}>
-        {
-          <div className="result">
-            <h2>Totals:</h2>
-            <p>Stars: {totalStars}</p>
-            <p>Rock: {totalRock}</p>
-            <p>Paper: {totalPaper}</p>
-            <p>Scissors: {totalScissors}</p>
-            <button onClick={getTotals}>Update Inventory</button>
-          </div>
-        }
-      </div>
-    );
-  };
+
+
 
   const handleSelectChange = (playerChoice) => {
     console.log(playerChoice['value']);
@@ -210,7 +147,7 @@ function App() {
     <div className="App">
       <h1>Restricted Rock-Paper-Scissors</h1>
       <span>&nbsp;&nbsp;</span>
-      <button className='choice-button' onClick={interact}>Start Game</button>
+      <button className='choice-button' onClick={startGameBatch}>Start Game</button>
       <span>&nbsp;&nbsp;</span>
       <h2>Select Player:</h2>
       <span>&nbsp;&nbsp;</span>
@@ -237,8 +174,8 @@ function App() {
           }})}
       />
       <button className='choice-button' onClick={readNicknames}>Nicknames</button>
-      <InventoryComponent />
-      <TotalsComponent />
+      <InventoryComponent ganache={Ganache} contract={contract}/>
+      <TotalsComponent contract={contract}/>
     </div>
   );
 }
