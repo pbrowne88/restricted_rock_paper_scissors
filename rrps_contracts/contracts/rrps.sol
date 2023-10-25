@@ -92,6 +92,10 @@ contract RRPS {
     mapping (address => uint8) public commitCount;                     // Tracks the number of games a player is currently committed to
     mapping (address => transferRequest) public transferRequests;      // Tracks transfer requests
 
+    function playerExists(address player) public view returns(bool) {
+        return players[player];
+    }
+
     function incrementToken(address player, int8 id, uint amount) internal {
         require(id >= 0 || id <= 3, "Invalid token ID.");
         balances[player][id] += amount;

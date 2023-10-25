@@ -9,16 +9,9 @@ const InventoryComponent = (props) => {
   const [scissors, setScissor] = useState(0);
 
   async function getBalance(){
-    const providersAccounts = await props.ganache.eth.getAccounts();
-    const defaultAccount = providersAccounts[0];
-    const player2 = providersAccounts[1];
-    const player3 = providersAccounts[2];
 
     try {
-      const inventory = await props.contract.methods.balanceOf().call({
-        from: player2,
-      }
-      )
+      const inventory = await props.contract.methods.balanceOf().call({from: props.currentAddress.value})
       
       setStars(parseInt(inventory[0]));
       setRock(parseInt(inventory[1]));
