@@ -4,11 +4,10 @@ import Web3, { ProviderError } from 'web3';
 
 import { GameInterface } from './gameInterface';
 
-
 const abi = require('../RRPS.json').abi;
 
 const Ganache = new Web3("HTTP://127.0.0.1:7545");
-const contract = new Ganache.eth.Contract(abi, '0xdfbC61172BB4441BE00E9E98483a03513C1CaEDc');
+const contract = new Ganache.eth.Contract(abi, '0x16C9e14c805672fa94E931584Be885E2F8B418a2');
 
 function Web3Container (){
 
@@ -46,7 +45,6 @@ function Web3Container (){
   // async function displayWallet(){
   //   console.log(account)
   // }
-
 
 
 

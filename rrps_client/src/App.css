@@ -24,6 +24,14 @@ h2 {
   font-family: 'Courier New', Courier, monospace;
 }
 
+h3 {
+  font-size: 1.5rem;
+  color: #61dafb; /* A bright accent color for the header */
+  margin-bottom: 20px;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+
 body {
   background-color: #282c36;
 }

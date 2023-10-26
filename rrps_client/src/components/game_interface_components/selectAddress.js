@@ -67,6 +67,7 @@ const SelectAddress = (
 
         props.setCurrentAddress(pchoice);
         props.setCurrentAddressExists(exists);
+        props.setOpponentPlayer(null);
       };
 
       return (

@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-
 /*
 TODO LIST:
 
@@ -53,8 +51,8 @@ contract RRPS {
     event OrphanedCommit(address challenger, address challengee);                                               // Player left unresolved commit behind
     event ChallengerFailedHashOnce(address challenger, address challengee);                                     // Challenger failed to solve hash once
     event ChallengerFailedHashTwice(address challenger, address challengee);                                    // Challenger failed to solve hash twice (auto-loss of star with no card burnt)
-    event TransferRequest(address requestSender, address requestee, int8 tokenType, uint8 amount);               // Player has requested a token transfer 
-    event TransferApproved(address requestSender, address requestee, int8 tokenType, uint8 amount);              // Player has approved a token transfer           
+    event TransferRequest(address requestSender, address requestee, int8 tokenType, uint8 amount);              // Player has requested a token transfer 
+    event TransferApproved(address requestSender, address requestee, int8 tokenType, uint8 amount);             // Player has approved a token transfer           
 
     int8 constant STAR = 0;
     int8 constant ROCK = 1; 
@@ -94,6 +92,18 @@ contract RRPS {
 
     function playerExists(address player) public view returns(bool) {
         return players[player];
+    }
+
+    function getCommit(address player1, address player2) public view returns(commit memory) {
+        return commits[player1][player2];
+    }
+
+    function getCommitCount(address player) public view returns(uint8) {
+        return commitCount[player];
+    }
+
+    function getTransferRequest(address requestSender) public view returns(transferRequest memory) {
+        return transferRequests[requestSender];
     }
 
     function incrementToken(address player, int8 id, uint amount) internal {
@@ -191,6 +201,20 @@ contract RRPS {
             removeCommit(commitArray[msg.sender][i], msg.sender);           // Delete any existing incoming commits
         }
         emit PlayerCashedOut(msg.sender);
+        emit PlayerLeft(msg.sender);
+    }
+
+    function leaveGame() public {
+        decrementToken(msg.sender, STAR, balanceOf(msg.sender, STAR));      // Remove remaining stars
+        decrementToken(msg.sender, ROCK, balanceOf(msg.sender, ROCK));          // Remove remaining rock cards
+        decrementToken(msg.sender, PAPER, balanceOf(msg.sender, PAPER));        // Remove remaining paper cards
+        decrementToken(msg.sender, SCISSORS, balanceOf(msg.sender, SCISSORS));  // Remove remaining scissors cards
+        players[msg.sender] = false;                                        // Deregister player
+        delete transferRequests[msg.sender];                                // Delete transfer requests
+        for (uint8 i=0; i<commitArray[msg.sender].length; i++){
+            removeCommit(msg.sender, commitArray[msg.sender][i]);           // Delete any existing outgoing commits
+            removeCommit(commitArray[msg.sender][i], msg.sender);           // Delete any existing incoming commits
+        }
         emit PlayerLeft(msg.sender);
     }
 
