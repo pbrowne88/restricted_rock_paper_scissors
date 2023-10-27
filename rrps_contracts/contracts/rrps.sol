@@ -52,7 +52,8 @@ contract RRPS {
     event ChallengerFailedHashOnce(address challenger, address challengee);                                     // Challenger failed to solve hash once
     event ChallengerFailedHashTwice(address challenger, address challengee);                                    // Challenger failed to solve hash twice (auto-loss of star with no card burnt)
     event TransferRequest(address requestSender, address requestee, int8 tokenType, uint8 amount);              // Player has requested a token transfer 
-    event TransferApproved(address requestSender, address requestee, int8 tokenType, uint8 amount);             // Player has approved a token transfer           
+    event TransferApproved(address requestSender, address requestee, int8 tokenType, uint8 amount);             // Player has approved a token transfer
+    event TransferEnded(address requestSender, address requestee);                                              // Player has ended a token transfer (either by cancelling or completing it)
 
     int8 constant STAR = 0;
     int8 constant ROCK = 1; 
@@ -183,7 +184,9 @@ contract RRPS {
                 removeCommit(commitArray[player][i], player);               // Delete any existing incoming commits
             }
             delete commitCount[player];                                     // Delete any existing commits count
-            delete transferRequests[player];                                // Delete transfer requests                                                                
+
+            emit TransferEnded(player, transferRequests[player].requestee);
+            delete transferRequests[player];                                // Delete transfer request                                                                
 
             emit PlayerEliminated(player);
             emit PlayerLeft(player);
@@ -195,6 +198,8 @@ contract RRPS {
         if (balanceOf(msg.sender, STAR) < 3) {revert InsufficientStars();}  // Check that player has 3 or more stars remaining
         decrementToken(msg.sender, STAR, balanceOf(msg.sender, STAR));      // Remove remaining stars
         players[msg.sender] = false;                                        // Deregister player
+
+        emit TransferEnded(msg.sender, transferRequests[msg.sender].requestee);
         delete transferRequests[msg.sender];                                // Delete transfer requests
         for (uint8 i=0; i<commitArray[msg.sender].length; i++){
             removeCommit(msg.sender, commitArray[msg.sender][i]);           // Delete any existing outgoing commits
@@ -210,6 +215,7 @@ contract RRPS {
         decrementToken(msg.sender, PAPER, balanceOf(msg.sender, PAPER));        // Remove remaining paper cards
         decrementToken(msg.sender, SCISSORS, balanceOf(msg.sender, SCISSORS));  // Remove remaining scissors cards
         players[msg.sender] = false;                                        // Deregister player
+        emit TransferEnded(msg.sender, transferRequests[msg.sender].requestee);
         delete transferRequests[msg.sender];                                // Delete transfer requests
         for (uint8 i=0; i<commitArray[msg.sender].length; i++){
             removeCommit(msg.sender, commitArray[msg.sender][i]);           // Delete any existing outgoing commits
