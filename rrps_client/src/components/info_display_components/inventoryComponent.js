@@ -31,7 +31,7 @@ const InventoryComponent = (props) => {
             <p>Rock: {rock}</p>
             <p>Paper: {paper}</p>
             <p>Scissors: {scissors}</p>
-            <button onClick={getBalance}>Update Inventory</button>
+            <button className='choice-button' onClick={getBalance}>Update Inventory</button>
           </div>
         }
       </div>

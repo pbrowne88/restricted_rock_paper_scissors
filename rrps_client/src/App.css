@@ -49,6 +49,42 @@ body {
   transition: background-color 0.3s ease;
 }
 
+.blocked-button {
+  background-color: #c7c7c7;
+  color: #ffffff;
+  font-size: 1.5rem;
+  padding: 10px 20px;
+  margin: 10px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.danger-button {
+  background-color: #a00c0c;
+  color: #ffffff;
+  font-size: 1.5rem;
+  padding: 10px 20px;
+  margin: 10px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.confirm-button {
+  background-color: #049652;
+  color: #ffffff;
+  font-size: 1.5rem;
+  padding: 10px 20px;
+  margin: 10px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
 .choice-button:hover {
   background-color: #45aaf2; /* Slightly darker color on hover */
 }

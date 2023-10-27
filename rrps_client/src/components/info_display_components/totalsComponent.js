@@ -28,7 +28,7 @@ const TotalsComponent = (props) => {
             <p>Rock: {totalRock}</p>
             <p>Paper: {totalPaper}</p>
             <p>Scissors: {totalScissors}</p>
-            <button onClick={getTotals}>Update Inventory</button>
+            <button className='choice-button' onClick={getTotals}>Update Inventory</button>
             </div>
         }
         </div>

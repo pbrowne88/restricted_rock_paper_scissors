@@ -6,12 +6,11 @@ import { GameInterface } from './gameInterface';
 
 const abi = require('../RRPS.json').abi;
 
-const Ganache = new Web3("HTTP://127.0.0.1:7545");
+const Ganache = new Web3("ws://127.0.0.1:7545");
 const contract = new Ganache.eth.Contract(abi, '0x16C9e14c805672fa94E931584Be885E2F8B418a2');
 
+
 function Web3Container (){
-
-
 
   // Metamask Shit
 
