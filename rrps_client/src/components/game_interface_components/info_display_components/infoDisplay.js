@@ -1,8 +1,8 @@
 import React from 'react';
 import { useState } from 'react';
 
-import {InventoryComponent} from './info_display_components/inventoryComponent';
-import {TotalsComponent} from './info_display_components/totalsComponent';
+import {InventoryComponent} from './inventoryComponent';
+import {TotalsComponent} from './totalsComponent';
 
 
 function InfoDisplay (props){

@@ -4,7 +4,6 @@ import { useState } from 'react';
 import {SelectPlayer} from "./game_interface_components/selectPlayer"
 import {SelectAddress} from "./game_interface_components/selectAddress"
 
-import { InfoDisplay } from './infoDisplay';
 import { ActionButtons } from './game_interface_components/actionButtons';
 
 function GameInterface (props){
@@ -130,17 +129,12 @@ function GameInterface (props){
             <ActionButtons
                 Ganache={props.Ganache} 
                 contract={props.contract} 
-                currentAddress={currentAddress}  
-                opponentPlayer={opponentPlayer}
+                currentAddress={currentAddress.value}  
+                opponentPlayer={opponentPlayer.value}
             />
             }
 
 
-            <InfoDisplay 
-                contract={props.contract} 
-                currentAddress={currentAddress} 
-                Ganache={props.Ganache} 
-            />
         </div>
     );
 }

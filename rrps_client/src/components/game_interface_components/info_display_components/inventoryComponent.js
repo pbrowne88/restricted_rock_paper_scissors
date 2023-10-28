@@ -1,5 +1,5 @@
 import React from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const InventoryComponent = (props) => {
 
@@ -8,10 +8,16 @@ const InventoryComponent = (props) => {
   const [paper, setPaper] = useState(0);
   const [scissors, setScissor] = useState(0);
 
+  useEffect(() => {
+    if (props.currentAddress){
+      getBalance()
+    }
+    });
+
   async function getBalance(){
 
     try {
-      const inventory = await props.contract.methods.balanceOf().call({from: props.currentAddress.value})
+      const inventory = await props.contract.methods.balanceOf().call({from: props.currentAddress})
       
       setStars(parseInt(inventory[0]));
       setRock(parseInt(inventory[1]));
@@ -31,7 +37,6 @@ const InventoryComponent = (props) => {
             <p>Rock: {rock}</p>
             <p>Paper: {paper}</p>
             <p>Scissors: {scissors}</p>
-            <button className='choice-button' onClick={getBalance}>Update Inventory</button>
           </div>
         }
       </div>

@@ -1,11 +1,16 @@
 import React from "react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
+
 
 const TotalsComponent = (props) => {
     const [totalStars, setTotalStars] = useState(0);
     const [totalRock, setTotalRock] = useState(0);
     const [totalPaper, setTotalPaper] = useState(0);
     const [totalScissors, setTotalScissor] = useState(0);
+
+    useEffect(() => {getTotals()});
+    
 
     async function getTotal(id) {
         const result = await props.contract.methods.totals(id).call();
@@ -28,7 +33,6 @@ const TotalsComponent = (props) => {
             <p>Rock: {totalRock}</p>
             <p>Paper: {totalPaper}</p>
             <p>Scissors: {totalScissors}</p>
-            <button className='choice-button' onClick={getTotals}>Update Inventory</button>
             </div>
         }
         </div>

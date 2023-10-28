@@ -36,24 +36,9 @@ contract RRPS {
 
     event PlayerJoined(address playerAddress, string nickname);                                                 // A player has joined the game for any reason
     event PlayerLeft(address playerAddress);                                                                    // A player has left the game for any reason
-    event PlayerEliminated(address playerAddress);                                                              // Player has lost all of their stars
-    event PlayerCashedOut(address playerAddress);                                                               // Player voluntarily cashes out
-    event ChallengeCommit(address challenger, address challengee);                                              // Challenger has issued a challenge to challengee
-    event OpenCommit(address challenger, address challengee);                                                   // Challengee has made an open commit to challenger's challenge
-    event ChallengerWins(address challenger, int8 challengerCard, address challengee, int8 challengeeCard);     // Challenger has won the challenge against challengee
-    event ChallengerLoses(address challenger, int8 challengerCard, address challengee, int8 challengeeCard);    // Challengee has won the challenge against challenger
-    event Tie(address challenger, int8 challengerCard, address challengee, int8 challengeeCard);                // Challenger and challengee have tied
-    event Misplay(address player, int8 card);                                                                   // Player has misplayed a card
-    event WithdrawnChallengeCommit(address challenger, address challengee);                                     // Challenger has withdrawn their challenge to challengee
-    event WithdrawnOpenCommit(address challenger, address challengee);                                          // Challengee has withdrawn their open commit to challenger
-    event CommitCreated(address player1, address player2);                                                      // Commit has been created for any reason
-    event CommitRemoved(address player1, address player2);                                                      // Commit has been removed for any reason
-    event OrphanedCommit(address challenger, address challengee);                                               // Player left unresolved commit behind
+       
     event ChallengerFailedHashOnce(address challenger, address challengee);                                     // Challenger failed to solve hash once
-    event ChallengerFailedHashTwice(address challenger, address challengee);                                    // Challenger failed to solve hash twice (auto-loss of star with no card burnt)
-    event TransferRequest(address requestSender, address requestee, int8 tokenType, uint8 amount);              // Player has requested a token transfer 
-    event TransferApproved(address requestSender, address requestee, int8 tokenType, uint8 amount);             // Player has approved a token transfer
-    event TransferEnded(address requestSender, address requestee);                                              // Player has ended a token transfer (either by cancelling or completing it)
+    event ChallengerFailedHashTwice(address challenger, address challengee);                                    // Challenger failed to solve hash twice (auto-loss of star wi                                        // Player has ended a token transfer (either by cancelling or completing it)
 
     int8 constant STAR = 0;
     int8 constant ROCK = 1; 
@@ -66,12 +51,15 @@ contract RRPS {
         bool exists;
         bool hashStrike; 
         uint blockNum;
+        address challenger;
+        address challengee;
     }
 
     struct transferRequest {
         address requestee;
         int8 tokenType;
         uint8 amount;
+        bool exists;
     }
 
     enum GameResult {
@@ -132,9 +120,10 @@ contract RRPS {
         commits[msg.sender][challengee].hash = hash;                        // Add hash to commits mapping
         commits[msg.sender][challengee].exists = true;                      // Set commits mapping to exist
         commits[msg.sender][challengee].blockNum = block.number;            // Add blocknumber 
+        commits[msg.sender][challengee].challenger = msg.sender;            // Add challenger address
+        commits[msg.sender][challengee].challengee = challengee;            // Add challengee address
         commitArray[msg.sender].push(challengee);                           // Add challengee to array of addresses committed against
         commitCount[msg.sender] += 1;                                       // Increment commitCount for challenger 
-        emit CommitCreated(msg.sender, challengee);
     }
 
     // This function is written from the perspective of the challengee
@@ -143,16 +132,16 @@ contract RRPS {
         commits[msg.sender][challenger].cardType = cardType;                // Add cardType to commits mapping
         commits[msg.sender][challenger].exists = true;                      // Set commits mapping to exist
         commits[msg.sender][challenger].blockNum = block.number;            // Add blocknumber 
+        commits[msg.sender][challenger].challengee = msg.sender;            // Add challenger address
+        commits[msg.sender][challenger].challenger = challenger;            // Add challengee address
         commitArray[msg.sender].push(challenger);                           // Add challenger to array of addresses committed against 
         commitCount[msg.sender] += 1;                                       // Increment commitCount for challengee 
-        emit CommitCreated(msg.sender, challenger);
     }
 
     function removeCommit(address fromPlayer, address toPlayer) internal {
         if (commits[fromPlayer][toPlayer].exists){
             delete commits[fromPlayer][toPlayer];
             commitCount[fromPlayer] -= 1;
-            emit CommitRemoved(fromPlayer, toPlayer);
         }
     }
 
@@ -185,10 +174,8 @@ contract RRPS {
             }
             delete commitCount[player];                                     // Delete any existing commits count
 
-            emit TransferEnded(player, transferRequests[player].requestee);
             delete transferRequests[player];                                // Delete transfer request                                                                
 
-            emit PlayerEliminated(player);
             emit PlayerLeft(player);
         }
     }
@@ -199,13 +186,11 @@ contract RRPS {
         decrementToken(msg.sender, STAR, balanceOf(msg.sender, STAR));      // Remove remaining stars
         players[msg.sender] = false;                                        // Deregister player
 
-        emit TransferEnded(msg.sender, transferRequests[msg.sender].requestee);
         delete transferRequests[msg.sender];                                // Delete transfer requests
         for (uint8 i=0; i<commitArray[msg.sender].length; i++){
             removeCommit(msg.sender, commitArray[msg.sender][i]);           // Delete any existing outgoing commits
             removeCommit(commitArray[msg.sender][i], msg.sender);           // Delete any existing incoming commits
         }
-        emit PlayerCashedOut(msg.sender);
         emit PlayerLeft(msg.sender);
     }
 
@@ -215,7 +200,6 @@ contract RRPS {
         decrementToken(msg.sender, PAPER, balanceOf(msg.sender, PAPER));        // Remove remaining paper cards
         decrementToken(msg.sender, SCISSORS, balanceOf(msg.sender, SCISSORS));  // Remove remaining scissors cards
         players[msg.sender] = false;                                        // Deregister player
-        emit TransferEnded(msg.sender, transferRequests[msg.sender].requestee);
         delete transferRequests[msg.sender];                                // Delete transfer requests
         for (uint8 i=0; i<commitArray[msg.sender].length; i++){
             removeCommit(msg.sender, commitArray[msg.sender][i]);           // Delete any existing outgoing commits
@@ -235,7 +219,6 @@ contract RRPS {
         if (commits[challengee][msg.sender].exists) {revert PlayerAlreadyChallenged();} // Check for open challenge against challengee
         if (commits[msg.sender][challengee].exists) {revert PlayerAlreadyChallenged();} // Check for open challenge against challenger
         issueCommit(challengee, hash);                                                  // Set commit mapping and increment commitCount for challenger 
-        emit ChallengeCommit(msg.sender, challengee);
     }
 
     // This function is written from the perspective of the challengee
@@ -251,11 +234,9 @@ contract RRPS {
         if (players[challenger] == false){                                          // Check to see if challenger is still in the game.
             removeCommit(challenger, msg.sender);                                   // If they are not, withdraw the challenge and end function early
             removeCommit(msg.sender, challenger);
-            emit OrphanedCommit(challenger, msg.sender);
             return ();
         }
         issueCommit(challenger, cardType);                                           // Set commit mapping and increment commitCount for challengee
-        emit OpenCommit(challenger, msg.sender);
     }
 
     // Written from the perspective of the challenger, who must now reveal their card by proving their hash
@@ -269,7 +250,6 @@ contract RRPS {
         if (players[challengee] == false){                                          // Check to see if challengee is still in the game. 
             removeCommit(msg.sender, challengee);                                   // If they are not, withdraw the challenge and end function early.
             removeCommit(challengee, msg.sender);
-            emit OrphanedCommit(msg.sender, challengee);
             return ();
         }
 
@@ -311,9 +291,9 @@ contract RRPS {
 
         // CARD HANDLING:
         // If the outcome is legitimate, burn both cards used, otherwise, only burn the legit card.
-        if      (gameResult == GameResult.Misplay_Challenger_Loses)     {decrementCard(challengee, challengeeCard, 1);  emit Misplay(msg.sender, challengerCard);}
-        else if (gameResult == GameResult.Misplay_Challenger_Wins)      {decrementCard(msg.sender, challengerCard, 1);  emit Misplay(challengee, challengeeCard);}
-        else if (gameResult == GameResult.Misplay_Tie)                  {emit Misplay(msg.sender, challengerCard);      emit Misplay(challengee, challengeeCard);}
+        if      (gameResult == GameResult.Misplay_Challenger_Loses)     {decrementCard(challengee, challengeeCard, 1); }
+        else if (gameResult == GameResult.Misplay_Challenger_Wins)      {decrementCard(msg.sender, challengerCard, 1); }
+        else if (gameResult == GameResult.Misplay_Tie)                  {}
         else {
             decrementCard(msg.sender, challengerCard, 1);
             decrementCard(challengee, challengeeCard, 1);
@@ -324,12 +304,10 @@ contract RRPS {
         if (gameResult == GameResult.Challenger_Loses || gameResult == GameResult.Misplay_Challenger_Loses){
             decrementToken(msg.sender, STAR, 1);
             incrementToken(challengee, STAR, 1);
-            emit ChallengerLoses(msg.sender, challengerCard, challengee, challengeeCard);
         }
         if (gameResult == GameResult.Challenger_Wins || gameResult == GameResult.Misplay_Challenger_Wins){
             decrementToken(challengee, STAR, 1);
             incrementToken(msg.sender, STAR, 1);
-            emit ChallengerWins(msg.sender, challengerCard, challengee, challengeeCard);
         }
         // If the result is a double misplay, burn one star from both participants.
         if (gameResult == GameResult.Misplay_Tie) {
@@ -338,9 +316,7 @@ contract RRPS {
             // Don't emit anything here, as misplay events have already been emitted during the CARD HANDLING step above. 
         }
         // If the result is a legitimate tie, no stars change hands
-        if (gameResult == GameResult.Tie) {
-            emit Tie(msg.sender, challengerCard, challengee, challengeeCard);
-        }
+        if (gameResult == GameResult.Tie) {}
 
         // Remove both commits
         removeCommit(msg.sender, challengee);
@@ -355,7 +331,6 @@ contract RRPS {
         if (!commits[msg.sender][challengee].exists) {revert NotYetChallenged();}               // Ensure that challenger has challenged challengee
         if (commits[challengee][msg.sender].exists) {revert OtherPlayerAlreadyCommitted();}     // Ensure no open commit from other player yet exists
         removeCommit(msg.sender, challengee);                                                   // Remove the commit
-        emit WithdrawnChallengeCommit(msg.sender, challengee);
     }
 
     /* 
@@ -376,7 +351,6 @@ contract RRPS {
         if (players[challenger] == false){                                          // Check to see if challenger is still in the game. 
             removeCommit(msg.sender, challenger);                                   // If they are not, withdraw the challenge and end function early.
             removeCommit(challenger, msg.sender);
-            emit OrphanedCommit(msg.sender, challenger);
             return ();
         }
 
@@ -389,7 +363,6 @@ contract RRPS {
             removeCommit(msg.sender, challenger);                                       // Remove the open commit
             removeCommit(challenger, msg.sender);                                       // Remove the initial commit
             gameOverCheck(challenger);
-            emit ChallengerLoses(challenger, commits[challenger][msg.sender].cardType, msg.sender, commits[msg.sender][challenger].cardType);
         }
     }
 
@@ -435,8 +408,7 @@ contract RRPS {
         if ((balanceOf(requestee, id) - commitCount[requestee]) < amount) {revert InsufficientUncommittedTokens();} // Check for sufficient uncommitted requestee tokens
         transferRequests[msg.sender].requestee = requestee;                         // Set requestee
         transferRequests[msg.sender].tokenType = id;                                // Set token type
-        transferRequests[msg.sender].amount = amount;                               // Set amount
-        emit TransferRequest(msg.sender, requestee, id, amount);                       
+        transferRequests[msg.sender].amount = amount;                               // Set amount               
     }
 
     function approveTokenTake(address requestSender) public {
@@ -450,7 +422,9 @@ contract RRPS {
 
         incrementToken(requestSender, transferRequests[requestSender].tokenType, transferRequests[requestSender].amount);   // Increment requester's token balance
         decrementToken(msg.sender, transferRequests[requestSender].tokenType, transferRequests[requestSender].amount);      // Decrement requestee's token balance
-        emit TransferApproved(requestSender, msg.sender, transferRequests[requestSender].tokenType, transferRequests[requestSender].amount); 
+
+        delete transferRequests[requestSender];                                // Delete transfer request
+        
         gameOverCheck(msg.sender);
     }
 }
