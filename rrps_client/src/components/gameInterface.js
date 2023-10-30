@@ -6,6 +6,9 @@ import {SelectAddress} from "./game_interface_components/selectAddress"
 
 import { ActionButtons } from './game_interface_components/actionButtons';
 
+import { InfoDisplay } from './info_display_components/infoDisplay';
+
+
 function GameInterface (props){
 
     // Functions and states and stuff go here.
@@ -17,8 +20,17 @@ function GameInterface (props){
     const [opponentPlayer, setOpponentPlayer] = useState(null);
     const [abandonAttempt, setAbandonAttempt] = useState(false); // This is a boolean that is true if the user has clicked the abandon game button.
 
+    function addressHandler(){
+        if (currentAddress) {
+            return currentAddress.value;
+        }
+        else {
+            return null;
+        }
+    }
+
     async function startGame(){     
-        if (await props.contract.methods.playerExists(currentAddress.value).call({from: currentAddress.value})    ) {
+        if (await props.contract.methods.playerExists(addressHandler()).call({from: addressHandler()})    ) {
             alert("This address is already playing the game!")
         }
         if (nicknameInput.trim().length < 4){
@@ -27,7 +39,7 @@ function GameInterface (props){
         }
         try{
             await props.contract.methods.startGame(nicknameInput).send({
-            from: currentAddress.value,
+            from: addressHandler(),
             gas: 1000000,
             });
             setCurrentAddress(null);
@@ -42,7 +54,7 @@ function GameInterface (props){
     async function abandonGame(){
         try{
             await props.contract.methods.leaveGame().send({
-            from: currentAddress.value,
+            from: addressHandler(),
             gas: 1000000,
             });
             setCurrentAddress(null);
@@ -55,14 +67,14 @@ function GameInterface (props){
     }
 
     async function cashOut(){
-        const inventory = await props.contract.methods.balanceOf().call({from: currentAddress.value})
+        const inventory = await props.contract.methods.balanceOf().call({from: addressHandler()})
         if (parseInt(inventory[1]) + parseInt(inventory[2]) + parseInt(inventory[1]) > 0){
             alert("You can't cash out while you have cards in your inventory.");
             return ;
         }
         try{
             await props.contract.methods.cashOut().send({
-            from: currentAddress.value,
+            from: addressHandler(),
             gas: 1000000,
             });
             setCurrentAddress(null);
@@ -96,7 +108,6 @@ function GameInterface (props){
             {abandonAttempt && <div>
                     <button className='danger-button' onClick={abandonGame}>Confirm Abandon Game</button>
                     <button className='choice-button' onClick={() => setAbandonAttempt(false)}>Cancel</button>
-                
                 </div>
             }
 
@@ -107,32 +118,43 @@ function GameInterface (props){
                 <button className='choice-button' onClick={startGame}>Start Game</button> 
             </div>}
 
+
+
             {!abandonAttempt && currentAddress && currentAddressExists &&
                 <div>
-                    <button className='danger-button' onClick={abandonAttemptHandler}>Abandon Game</button> 
-                    <button className='choice-button' onClick={cashOut}>Cash Out</button> 
-                <h2>Select Opponent:</h2>
+                    {!opponentPlayer && <h2>Select Opponent:</h2>}
+                    {opponentPlayer && <h2>--VS--</h2>}
                 <SelectPlayer 
                     contract={props.contract} 
                     playerChoice={opponentPlayer} 
                     setPlayerChoice={setOpponentPlayer} 
                     Ganache={props.Ganache}
-                    currentAddress={currentAddress} 
+                    currentAddress={addressHandler()} 
                     setCurrentAddress={setCurrentAddress} 
                 />
-
-
-
+                    {!opponentPlayer && <div>
+                    <h3>-- OR --</h3>
+                    <button className='danger-button' onClick={abandonAttemptHandler}>Abandon Game</button> 
+                    <button className='choice-button' onClick={cashOut}>Cash Out</button>
+                    </div>}
                 </div>
             }
             {!abandonAttempt && opponentPlayer &&
+            <div>
             <ActionButtons
                 Ganache={props.Ganache} 
                 contract={props.contract} 
-                currentAddress={currentAddress.value}  
+                currentAddress={addressHandler()}  
                 opponentPlayer={opponentPlayer.value}
             />
+            </div>
             }
+
+            <InfoDisplay 
+                contract={props.contract} 
+                currentAddress={addressHandler()} 
+                Ganache={props.Ganache} 
+            />
 
 
         </div>

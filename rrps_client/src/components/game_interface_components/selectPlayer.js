@@ -45,7 +45,7 @@ const SelectPlayer = (
 
         // This removes the current address from the list of opponents, preventing self-challenges
         if (props.currentAddress){
-          nicknames = nicknames.filter((item) => item.value !== props.currentAddress.value);
+          nicknames = nicknames.filter((item) => item.value !== props.currentAddress);
         }
 
         setPlayerNames(nicknames);

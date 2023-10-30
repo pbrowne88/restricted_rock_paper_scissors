@@ -12,7 +12,7 @@ function InfoDisplay (props){
     return (
         <div>
             <InventoryComponent ganache={props.Ganache} contract={props.contract} currentAddress={props.currentAddress}/>
-            <TotalsComponent contract={props.contract}/>
+            {/* <TotalsComponent contract={props.contract}/> */}
         </div>
     );
 }

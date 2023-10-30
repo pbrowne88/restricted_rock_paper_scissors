@@ -7,7 +7,7 @@ import { GameInterface } from './gameInterface';
 const abi = require('../RRPS.json').abi;
 
 const Ganache = new Web3("ws://127.0.0.1:7545");
-const contract = new Ganache.eth.Contract(abi, '0xAAe097b9cE4DAC4AcCbFDfe0B949BfF93feb5bc3');
+const contract = new Ganache.eth.Contract(abi, '0x5BB77E400862e3186eAeEdbCa4E9992bBd54aB03');
 
 
 function Web3Container (){

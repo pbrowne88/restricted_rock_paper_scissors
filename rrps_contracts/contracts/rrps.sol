@@ -408,7 +408,8 @@ contract RRPS {
         if ((balanceOf(requestee, id) - commitCount[requestee]) < amount) {revert InsufficientUncommittedTokens();} // Check for sufficient uncommitted requestee tokens
         transferRequests[msg.sender].requestee = requestee;                         // Set requestee
         transferRequests[msg.sender].tokenType = id;                                // Set token type
-        transferRequests[msg.sender].amount = amount;                               // Set amount               
+        transferRequests[msg.sender].amount = amount;                               // Set amount     
+        transferRequests[msg.sender].exists = true;          
     }
 
     function approveTokenTake(address requestSender) public {
