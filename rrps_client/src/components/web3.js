@@ -1,49 +1,50 @@
 import React from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Web3, { ProviderError } from 'web3';
 
 import { GameInterface } from './gameInterface';
 
-const abi = require('../RRPS.json').abi;
+// const Ganache = new Web3("ws://127.0.0.1:7545");
+// const contract = new Ganache.eth.Contract(abi, '0xFEfdca043c0060981c8c06cd8190FAe56Ff95dcA');
+// const abi = require('../RRPS.json').abi;
 
-const Ganache = new Web3("ws://127.0.0.1:7545");
-const contract = new Ganache.eth.Contract(abi, '0x5BB77E400862e3186eAeEdbCa4E9992bBd54aB03');
-
+const abi = require('../remix_abi.json');
 
 function Web3Container (){
 
-  // Metamask Shit
+  const web3 = new Web3(window.ethereum)
+  const contract = new web3.eth.Contract(abi, '0x94BB080844AC1E043C3326c7f4785bFDdA8386A7')
 
-  // const [web3, setWeb3] = useState(null);
-  // const [account, setAccount] = useState('');
+  const [account, setAccount] = useState('');
+  // const [contract, setContract] = useState(null);
 
-  // useEffect(() => {
-  //   async function loadWeb3() {
-  //     if (window.ethereum) {
-  //       const web3Instance = new Web3(window.ethereum);
-  //       setWeb3(web3Instance);
+  useEffect(() => {
+    async function loadWeb3() {
+      if (window.ethereum) {
+        // const web3Instance = new ;
+        // setWeb3(web3Instance);
+        // setContract(new web3.eth.Contract(abi, '0x94BB080844AC1E043C3326c7f4785bFDdA8386A7'))
+        try {
+          // Request account access if needed
+          await window.ethereum.enable();
+          // Get the user's Ethereum address
+          const accounts = await web3.eth.getAccounts();
+          setAccount(accounts[0]);
+        } catch (error) {
+          console.error('Error connecting to MetaMask:', error);
+        }
+      } else {
+        console.error('MetaMask not detected. Please install MetaMask.');
+      }
+    }
 
-  //       try {
-  //         // Request account access if needed
-  //         await window.ethereum.enable();
-  //         // Get the user's Ethereum address
-  //         const accounts = await web3Instance.eth.getAccounts();
-  //         setAccount(accounts[0]);
-  //       } catch (error) {
-  //         console.error('Error connecting to MetaMask:', error);
-  //       }
-  //     } else {
-  //       console.error('MetaMask not detected. Please install MetaMask.');
-  //     }
-  //   }
-
-  //   loadWeb3();
-  // }, []);
+    loadWeb3();
+  }, []);
 
 
-  // async function displayWallet(){
-  //   console.log(account)
-  // }
+  function logAddress(){
+    console.log(contract);
+  }
 
 
 
@@ -51,9 +52,9 @@ function Web3Container (){
       <div>
       <GameInterface 
         contract={contract} 
-        Ganache={Ganache}
-        Web3={Web3}
+        Ganache={web3}
       />
+      <button onClick={logAddress}> LOG ME BRO</button>
       </div>
     );
 }
