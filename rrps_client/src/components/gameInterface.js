@@ -40,7 +40,7 @@ function GameInterface (props){
         try{
             await props.contract.methods.startGame(nicknameInput).send({
                 from: addressHandler(),
-                gas: 1000000,
+                // gas: 1000000,
             });
             setCurrentAddress(null);
             setOpponentPlayer(null);

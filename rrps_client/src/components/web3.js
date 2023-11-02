@@ -12,6 +12,29 @@ function Web3Container (){
   const contract = new web3.eth.Contract(abi, '0x94BB080844AC1E043C3326c7f4785bFDdA8386A7')
 
 
+  const [account, setAccount] = useState('');
+
+  useEffect(() => {
+    async function loadWeb3() {
+      if (window.ethereum) {
+        try {
+          // Request account access if needed
+          await window.ethereum.enable();
+          // Get the user's Ethereum address
+          const accounts = await web3.eth.getAccounts();
+          setAccount(accounts[0]);
+        } catch (error) {
+          console.error('Error connecting to MetaMask:', error);
+        }
+      } else {
+        console.error('MetaMask not detected. Please install MetaMask.');
+      }
+    }
+    loadWeb3();
+  }, []);
+
+
+
   function logAddress(){
     console.log(contract);
   }
@@ -41,23 +64,3 @@ export {Web3Container};
 
 // Potentially superfluous code for getting accounts from MetaMask
 
-// const [account, setAccount] = useState('');
-//
-// useEffect(() => {
-//   async function loadWeb3() {
-//     if (window.ethereum) {
-//       try {
-//         // Request account access if needed
-//         await window.ethereum.enable();
-//         // Get the user's Ethereum address
-//         const accounts = await web3.eth.getAccounts();
-//         setAccount(accounts[0]);
-//       } catch (error) {
-//         console.error('Error connecting to MetaMask:', error);
-//       }
-//     } else {
-//       console.error('MetaMask not detected. Please install MetaMask.');
-//     }
-//   }
-//   loadWeb3();
-// }, []);
