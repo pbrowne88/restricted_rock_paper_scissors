@@ -8,16 +8,7 @@ const SelectAddress = (
       const [playerAddresses, setPlayerAddresses] = useState([{value: null, label: 'No Players'}])
 
       async function getNicknames(){
-        var Events = await props.contract.getPastEvents('allEvents', {fromBlock:1})
-        .then(function(events) {
-          // Process the retrieved events
-          return events;
-        })
-        .catch(function(error) {
-          // Handle errors
-          console.error(error);
-        });
-    
+        const Events = await props.contract.queryFilter("*", 0, "latest");
         return Events;
       }
     
@@ -25,24 +16,27 @@ const SelectAddress = (
           var Events = await getNicknames();
           var nicknames  = [];
           for (let i = 0; i < Events.length; i++) {
-              if (Events[i].event === 'PlayerJoined'){
-                const nickname = Events[i].returnValues.nickname;
-                const address = Events[i].returnValues.playerAddress;
+              if (Events[i].eventName === 'PlayerJoined'){
+                const nickname = Events[i].args[1];
+                const address = Events[i].args[0];
                 nicknames.push({nickname: `${nickname} (${address})`, address: address})
               }
 
-              if (Events[i].event === 'PlayerLeft'){
-                const address = Events[i].returnValues.playerAddress;
+              if (Events[i].fragment.name === 'PlayerLeft'){
+                const address = Events[i].args[0];
                 nicknames = nicknames.filter((item) => item.address !== address);
               }
             }
-
-          
+            
           return(nicknames);
       }
 
       async function getAddresses(){
-          const addresses = await props.Ganache.eth.getAccounts();
+          const rpcSigners = await props.provider.listAccounts();
+          var addresses = [];
+          for (let i = 0; i < rpcSigners.length; i++) {
+            addresses.push(rpcSigners[i]['address']);
+          }
           var addressList = [];
           const nicknames = await readNicknames();
           for (let i = 0; i < addresses.length; i++) {
@@ -62,7 +56,7 @@ const SelectAddress = (
       async function handleSelectChange (pchoice) {
         var exists = false;
         if (pchoice) {
-           exists = await props.contract.methods.playerExists(pchoice.value).call({from: pchoice.value})          
+           exists = await props.contract.playerExists(pchoice.value);          
         }
 
         props.setCurrentAddress(pchoice);

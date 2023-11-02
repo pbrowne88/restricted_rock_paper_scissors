@@ -17,7 +17,7 @@ const InventoryComponent = (props) => {
   async function getBalance(){
 
     try {
-      const inventory = await props.contract.methods.balanceOf().call({from: props.currentAddress})
+      const inventory = await props.contract.balanceOf();
       
       setStars(parseInt(inventory[0]));
       setRock(parseInt(inventory[1]));

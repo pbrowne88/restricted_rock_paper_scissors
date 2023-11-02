@@ -363,7 +363,7 @@ const ActionButtons = function (props) {
             
             </div>}
 
-            <OpponentInventory ganache={props.Ganache} contract={props.contract} currentAddress={props.opponentPlayer}/>
+            <OpponentInventory provider={props.provider} contract={props.contract} currentAddress={props.opponentPlayer}/>
 
         </div>
     )

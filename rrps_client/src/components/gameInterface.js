@@ -1,5 +1,6 @@
 import React from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { ethers } from 'ethers';
 
 import {SelectPlayer} from "./game_interface_components/selectPlayer"
 import {SelectAddress} from "./game_interface_components/selectAddress"
@@ -20,6 +21,21 @@ function GameInterface (props){
     const [opponentPlayer, setOpponentPlayer] = useState(null);
     const [abandonAttempt, setAbandonAttempt] = useState(false); // This is a boolean that is true if the user has clicked the abandon game button.
 
+    useEffect(() => {
+        const newContract = async () => {
+            if (currentAddress && currentAddressExists) {
+                const signer = await props.provider.getSigner(currentAddress.value);
+                props.setContract(new ethers.Contract('0x94BB080844AC1E043C3326c7f4785bFDdA8386A7', props.abi, signer))
+                console.log(props.contract);
+            } else { 
+                props.setContract(new ethers.Contract('0x94BB080844AC1E043C3326c7f4785bFDdA8386A7', props.abi, props.provider))
+                console.log(props.contract);
+            }
+        };
+
+        newContract();
+    }, [currentAddress, currentAddressExists]);
+
     function addressHandler(){
         if (currentAddress) {
             return currentAddress.value;
@@ -30,18 +46,12 @@ function GameInterface (props){
     }
 
     async function startGame(){     
-        if (await props.contract.methods.playerExists(addressHandler()).call({from: addressHandler()})) {
-            alert("This address is already playing the game!")
-        }
         if (nicknameInput.trim().length < 4){
             alert("Please enter a nickname of at least 4 characters.");
             return;
         }
         try{
-            await props.contract.methods.startGame(nicknameInput).send({
-                from: addressHandler(),
-                // gas: 1000000,
-            });
+            await props.contract.startGame(nicknameInput);
             setCurrentAddress(null);
             setOpponentPlayer(null);
             setNicknameInput('');
@@ -67,7 +77,7 @@ function GameInterface (props){
     }
 
     async function cashOut(){
-        const inventory = await props.contract.methods.balanceOf().call({from: addressHandler()})
+        const inventory = await props.contract.balanceOf();
         if (parseInt(inventory[1]) + parseInt(inventory[2]) + parseInt(inventory[1]) > 0){
             alert("You can't cash out while you have cards in your inventory.");
             return ;
@@ -100,7 +110,7 @@ function GameInterface (props){
                     currentAddressExists={currentAddressExists}
                     setCurrentAddressExists={setCurrentAddressExists}
                     setOpponentPlayer={setOpponentPlayer}
-                    Ganache={props.Ganache} 
+                    provider={props.provider} 
                     contract={props.contract}
                 />
             </div>}
@@ -128,7 +138,7 @@ function GameInterface (props){
                     contract={props.contract} 
                     playerChoice={opponentPlayer} 
                     setPlayerChoice={setOpponentPlayer} 
-                    Ganache={props.Ganache}
+                    provider={props.provider}
                     currentAddress={addressHandler()} 
                     setCurrentAddress={setCurrentAddress} 
                 />
@@ -142,7 +152,7 @@ function GameInterface (props){
             {!abandonAttempt && opponentPlayer &&
             <div>
             <ActionButtons
-                Ganache={props.Ganache} 
+                provider={props.provider} 
                 contract={props.contract} 
                 currentAddress={addressHandler()}  
                 opponentPlayer={opponentPlayer.value}
@@ -153,7 +163,7 @@ function GameInterface (props){
             <InfoDisplay 
                 contract={props.contract} 
                 currentAddress={addressHandler()} 
-                Ganache={props.Ganache} 
+                provider={props.provider} 
             />
 
 
