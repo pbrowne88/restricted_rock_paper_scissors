@@ -30,7 +30,7 @@ function GameInterface (props){
     }
 
     async function startGame(){     
-        if (await props.contract.methods.playerExists(addressHandler()).call({from: addressHandler()})    ) {
+        if (await props.contract.methods.playerExists(addressHandler()).call({from: addressHandler()})) {
             alert("This address is already playing the game!")
         }
         if (nicknameInput.trim().length < 4){
@@ -39,8 +39,8 @@ function GameInterface (props){
         }
         try{
             await props.contract.methods.startGame(nicknameInput).send({
-            from: addressHandler(),
-            gas: 1000000,
+                from: addressHandler(),
+                gas: 1000000,
             });
             setCurrentAddress(null);
             setOpponentPlayer(null);
