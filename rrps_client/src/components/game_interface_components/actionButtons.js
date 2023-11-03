@@ -1,5 +1,6 @@
 import React from "react";
 import { useState, useEffect } from "react";
+import { Typed } from "ethers";
 
 import { ToggleButtons, ToggleButtonsFour } from "./toggleButtons.js";
 import NumericInput from 'react-numeric-input';
@@ -44,8 +45,8 @@ const ActionButtons = function (props) {
     }
 
     async function getCommits() {
-        const outCommit = await props.contract.methods.getCommit(props.currentAddress, props.opponentPlayer).call({from: props.currentAddress});
-        const inCommit = await props.contract.methods.getCommit(props.opponentPlayer, props.currentAddress).call({from: props.currentAddress});
+        const outCommit = await props.contract.getCommit(props.currentAddress, props.opponentPlayer);
+        const inCommit = await props.contract.getCommit(props.opponentPlayer, props.currentAddress);
 
         if (outCommit.exists && !inCommit.exists) {
             if (hashCommit !== true)                    {setHashCommit(true)};
@@ -74,8 +75,8 @@ const ActionButtons = function (props) {
     }
 
     async function getTransfers () {
-        const outTransfer = await props.contract.methods.getTransferRequest(props.currentAddress).call({from: props.currentAddress});
-        const inTransfer = await props.contract.methods.getTransferRequest(props.opponentPlayer).call({from: props.currentAddress});
+        const outTransfer = await props.contract.getTransferRequest(props.currentAddress);
+        const inTransfer = await props.contract.getTransferRequest(props.opponentPlayer);
 
         const tokenList = ["Star", "Rock", "Paper", "Scissors"]
         const id = tokenList[parseInt(inTransfer.tokenType)];
@@ -101,6 +102,39 @@ const ActionButtons = function (props) {
         }
     }
 
+    async function checkForUncommittedTokens (type) {
+        const yourInventory = await props.contract.balanceOf();
+        const yourChallengeCount = await props.contract.getCommitCount(Typed.address(props.currentAddress));
+        const opponentInventory = await props.contract.balanceOf(Typed.address(props.opponentPlayer));
+        const opponentChallengeCount = await props.contract.getCommitCount(Typed.address(props.opponentPlayer));
+
+        // Check if you have any uncommitted cards
+        if (yourInventory[1] + yourInventory[2] + yourInventory[3] - yourChallengeCount < 1 ) {
+            alert("You have no uncommitted cards in your inventory.");
+            return false;
+        }
+        
+        // Check if opponent has any uncommitted cards
+        if (opponentInventory[1] + opponentInventory[2] + opponentInventory[3] - opponentChallengeCount < 1 && type === "hash") {
+            alert("Your opponent has no uncommitted cards in their inventory.");
+            return false;
+        }
+
+        // Check if you have any uncommitted stars
+        if (yourInventory[0] - yourChallengeCount < 1) {
+            alert("You have no uncommitted stars in your inventory.");
+            return false;
+        }
+
+        // Check if opponent has any uncommitted stars
+        if (opponentInventory[0] - opponentChallengeCount < 1 && type === "hash") {
+            alert("Your opponent has no uncommitted stars in their inventory.");
+            return false;
+        }
+
+        return true;
+    }
+
     async function startHashCommit () {
         setHideUI(true);
         setHashCommitUI(true);
@@ -117,14 +151,17 @@ const ActionButtons = function (props) {
     }
 
     async function issueHashCommit () {
+        const uncommittedTokens = await checkForUncommittedTokens("hash");
+        if (!uncommittedTokens){
+            return ;
+        }
+
         try{
-            await props.contract.methods.challengeCommit(
+            console.log("HELLO??")
+            await props.contract.challengeCommit(
                 props.opponentPlayer,
                 await getHash()
-            ).send({
-            from: props.currentAddress,
-            gas: 1000000,
-            });
+            );
         }
         catch (error){
             console.error(error);
@@ -135,18 +172,13 @@ const ActionButtons = function (props) {
     }
 
     async function getHash () {
-        var hash = await props.contract.methods.hashCommit(tokenType,nonceInput).call({from: props.currentAddress});
+        var hash = await props.contract.hashCommit(tokenType,nonceInput);
         return hash;
     }
 
     async function withdrawChallenge () {
         try{
-            await props.contract.methods.withdrawChallenge(
-                props.opponentPlayer
-            ).send({
-            from: props.currentAddress,
-            gas: 1000000,
-            });
+            await props.contract.withdrawChallenge(props.opponentPlayer);
         }
         catch (error){
             console.error(error);
@@ -155,14 +187,12 @@ const ActionButtons = function (props) {
     }
 
     async function issueOpenCommit () {
+        const uncommittedTokens = await checkForUncommittedTokens("open");
+        if (!uncommittedTokens){
+            return ;
+        }
         try{
-            await props.contract.methods.openCommit(
-                props.opponentPlayer,
-                tokenType
-            ).send({
-            from: props.currentAddress,
-            gas: 1000000,
-            });
+            await props.contract.openCommit(props.opponentPlayer,tokenType);
         }
         catch (error){
             console.error(error);
@@ -174,14 +204,11 @@ const ActionButtons = function (props) {
 
     async function issueReveal () {
         try{
-            await props.contract.methods.reveal(
+            await props.contract.reveal(
                 props.opponentPlayer,
                 tokenType,
                 nonceInput
-            ).send({
-            from: props.currentAddress,
-            gas: 1000000,
-            });
+            );
         }
         catch (error){
             console.error(error);
@@ -193,12 +220,7 @@ const ActionButtons = function (props) {
 
     async function timeOutWin () {
         try{
-            await props.contract.methods.timeOutWin(
-                props.opponentPlayer
-            ).send({
-            from: props.currentAddress,
-            gas: 1000000,
-            });
+            await props.contract.timeOutWin(props.opponentPlayer);
         }
         catch (error){
             console.error(error);
@@ -224,14 +246,11 @@ const ActionButtons = function (props) {
 
     async function issueTransferProposal () {
         try{
-            await props.contract.methods.requestTokenTake(
+            await props.contract.requestTokenTake(
                 props.opponentPlayer,
                 transferTokenType,
                 transferTokenAmount
-            ).send({
-            from: props.currentAddress,
-            gas: 1000000,
-            });
+            );
         }
         catch (error){
             console.error(error);
@@ -251,20 +270,15 @@ const ActionButtons = function (props) {
 
     async function approveTransfer () {
         try{
-            await props.contract.methods.approveTokenTake(
+            await props.contract.approveTokenTake(
                 props.opponentPlayer
-            ).send({
-            from: props.currentAddress,
-            gas: 1000000,
-            });
+            );
         }
         catch (error){
             console.error(error);
         }
         refreshInfo();
     }
-
-
 
     return (
         <div>
@@ -297,6 +311,7 @@ const ActionButtons = function (props) {
                 <h3>Issue Challenge: </h3>
                 <p>Enter password and card below.</p>
                 <p>Make sure you take note of the password and card used; you will need this information to reveal your card at the end of the challenge.</p>
+                <p>You don't need to have a copy of the card you're attempting to commit, but you will need to have one or more copies of that card to reveal and win the challenge.</p>
                 
                 <p>Create password:
                 <input type="text" maxLength="20" value={nonceInput} onChange={(e) => setNonceInput(e.target.value)}></input>
@@ -363,7 +378,7 @@ const ActionButtons = function (props) {
             
             </div>}
 
-            <OpponentInventory provider={props.provider} contract={props.contract} currentAddress={props.opponentPlayer}/>
+            <OpponentInventory provider={props.provider} contract={props.contract} opponentPlayer={props.opponentPlayer}/>
 
         </div>
     )

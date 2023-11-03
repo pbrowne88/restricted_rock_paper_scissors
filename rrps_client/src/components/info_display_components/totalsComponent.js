@@ -13,7 +13,7 @@ const TotalsComponent = (props) => {
     
 
     async function getTotal(id) {
-        const result = await props.contract.methods.totals(id).call();
+        const result = await props.contract.totals(id);
         return parseInt(result);
     }
 

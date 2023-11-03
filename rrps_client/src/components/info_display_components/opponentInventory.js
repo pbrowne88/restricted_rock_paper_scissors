@@ -1,5 +1,6 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
+import { Typed } from 'ethers';
 
 const OpponentInventory = (props) => {
 
@@ -7,9 +8,10 @@ const OpponentInventory = (props) => {
   const [rock, setRock] = useState(0);
   const [paper, setPaper] = useState(0);
   const [scissors, setScissor] = useState(0);
+  const [challenges, setChallenges] = useState(0);
 
   useEffect(() => {
-    if (props.currentAddress){
+    if (props.opponentPlayer){
       getBalance()
     }
     });
@@ -17,7 +19,7 @@ const OpponentInventory = (props) => {
   async function getBalance(){
 
     try {
-      const inventory = await props.contract.methods.balanceOf().call({from: props.currentAddress})
+      const inventory = await props.contract.balanceOf(Typed.address(props.opponentPlayer));
       
       setStars(parseInt(inventory[0]));
       setRock(parseInt(inventory[1]));
@@ -26,7 +28,16 @@ const OpponentInventory = (props) => {
     } catch (error){
       console.error(error);
     }
+    
+    try {
+      const challenges = await props.contract.getCommitCount(Typed.address(props.opponentPlayer));
+      setChallenges(parseInt(challenges));
+    } catch (error){
+      console.error(error);
+    }
   }
+
+
 
     return (
       <div className="result" style={{position: 'fixed', bottom: 5, right:5 }}>
@@ -37,6 +48,7 @@ const OpponentInventory = (props) => {
             <p>Rock: {rock}</p>
             <p>Paper: {paper}</p>
             <p>Scissors: {scissors}</p>
+            <p>Challenges: {challenges}</p>
           </div>
         }
       </div>

@@ -1,24 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
+import "@openzeppelin/contracts/access/Ownable.sol";
+
 /*
 TODO LIST:
 
-- Re-implement payable tag on startGame function
+- Implement cashing out stars from the contract's account -- 0.003 Eth per star on a 0.01 Eth buyin? ( Re-implement payable tag on startGame function)
 
-- Implement cashing out stars from the contract's account -- 0.03 Eth per star on a 0.1 Eth buyin?
+- Implement withdrawing funds from the contract's account -- create something that tracks which funds are available for withdrawal:
+    - 0.001 Eth per player joined
+    - 0.003 Eth per star lost via 
 
-- Replace block duration test value of 1 with the intended value of 5000
-
-- Create separate commit trackers for each kind of card (rock, paper, scissors) so that 
-  players can't commit to a challenge with a card they don't have, and so that players
-  can't trade away cards they (might) have committed to a challenge.
-
-- Test trading logic
+- Implement system for booting players who have been inactive for too long.
 
 */
 
-contract RRPS {
+contract RRPS is Ownable {
 
     error AddressAlreadyPlaying();          // Address is already playing the game
     error PlayerNotFound();                 // Address is not currently playing the game
@@ -78,6 +76,10 @@ contract RRPS {
     mapping (address => address[]) commitArray;                        // This is merely used to re-initialize the commits mapping when a player leaves the game
     mapping (address => uint8) public commitCount;                     // Tracks the number of games a player is currently committed to
     mapping (address => transferRequest) public transferRequests;      // Tracks transfer requests
+
+    // function withdrawFunds() public onlyOwner {
+    //     payable(msg.sender).transfer(address(this).balance);
+    // }
 
     function playerExists(address player) public view returns(bool) {
         return players[player];
@@ -145,8 +147,8 @@ contract RRPS {
         }
     }
 
-    function startGame(string memory nickname) public /* payable */ {
-        // require(msg.value >= 0.1 ether); // Check payment
+    function startGame(string memory nickname) public /*payable*/ {
+        // require(msg.value >= 0.01 ether, "Player must pay an ante of at least 0.01 Ethereum"); // Check payment
         if (players[msg.sender] == true) {revert AddressAlreadyPlaying();}  // Ensure that address is not currently playing the game
         players[msg.sender] = true;                                         // Log the address as playing the game
         for (uint8 i=0; i<commitArray[msg.sender].length; i++){
@@ -173,9 +175,7 @@ contract RRPS {
                 removeCommit(commitArray[player][i], player);               // Delete any existing incoming commits
             }
             delete commitCount[player];                                     // Delete any existing commits count
-
             delete transferRequests[player];                                // Delete transfer request                                                                
-
             emit PlayerLeft(player);
         }
     }
@@ -195,7 +195,7 @@ contract RRPS {
     }
 
     function leaveGame() public {
-        decrementToken(msg.sender, STAR, balanceOf(msg.sender, STAR));      // Remove remaining stars
+        decrementToken(msg.sender, STAR, balanceOf(msg.sender, STAR));          // Remove remaining stars
         decrementToken(msg.sender, ROCK, balanceOf(msg.sender, ROCK));          // Remove remaining rock cards
         decrementToken(msg.sender, PAPER, balanceOf(msg.sender, PAPER));        // Remove remaining paper cards
         decrementToken(msg.sender, SCISSORS, balanceOf(msg.sender, SCISSORS));  // Remove remaining scissors cards
@@ -246,7 +246,6 @@ contract RRPS {
         if (cardType < 1 || cardType > 3) {revert MustBeRockPaperOrScissors();}     // Check that cardType is one of ROCK (1), PAPER (2), SCISSORS (3)
         if (!commits[challengee][msg.sender].exists) {revert NoOpenCommit();}       // Check that challengee has made an open commit to challenger's challenge
         if (!commits[msg.sender][challengee].exists) {revert NotYetChallenged();}   // Check that challenger has challenged challengee
-
         if (players[challengee] == false){                                          // Check to see if challengee is still in the game. 
             removeCommit(msg.sender, challengee);                                   // If they are not, withdraw the challenge and end function early.
             removeCommit(challengee, msg.sender);
@@ -333,17 +332,6 @@ contract RRPS {
         removeCommit(msg.sender, challengee);                                                   // Remove the commit
     }
 
-    /* 
-    After thinking about it, there shouldn't ever be a valid reason to withdraw an open commit.
-    Either the original challenger reveals, or the challengee uses the timeout win.
-    */
-    // function withdrawOpenCommit(address challenger) public {
-    //     if (!commits[msg.sender][challenger].exists) {revert NoOpenCommit();}       // Check that challengee has made an open commit to challenger's challenge
-    //     if (!commits[challenger][msg.sender].exists) {revert NotYetChallenged();}   // Check that challenger has challenged challengee
-    //     removeCommit(challenger, msg.sender);                                       // Remove the open commit
-    //     emit WithdrawnOpenCommit(challenger, msg.sender);
-    // }
-
     function timeOutWin(address challenger) public {
         if (!commits[msg.sender][challenger].exists) {revert NoOpenCommit();}       // Check that challengee has made an open commit to challenger's challenge
         if (!commits[challenger][msg.sender].exists) {revert NotYetChallenged();}   // Check that challenger has challenged challengee
@@ -354,7 +342,7 @@ contract RRPS {
             return ();
         }
 
-        if (commits[msg.sender][challenger].blockNum < (block.number - 1 /*Change this to 5000 for deployment*/)){ // Check if 5000 blocks have elapsed
+        if (commits[msg.sender][challenger].blockNum < (block.number - 5000 )){         // Check if 5000 blocks have elapsed
             decrementToken(challenger, STAR, 1);                                        // Challenger loses a star
             incrementToken(msg.sender, STAR, 1);                                        // Challengee gains a star
             if (balanceOf(msg.sender, commits[msg.sender][challenger].cardType) > 0){   // If challengee has a copy of the card they committed...

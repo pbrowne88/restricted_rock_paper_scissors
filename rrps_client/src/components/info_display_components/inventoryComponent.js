@@ -1,5 +1,6 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
+import { Typed } from 'ethers';
 
 const InventoryComponent = (props) => {
 
@@ -7,6 +8,7 @@ const InventoryComponent = (props) => {
   const [rock, setRock] = useState(0);
   const [paper, setPaper] = useState(0);
   const [scissors, setScissor] = useState(0);
+  const [challenges, setChallenges] = useState(0);
 
   useEffect(() => {
     if (props.currentAddress){
@@ -26,6 +28,12 @@ const InventoryComponent = (props) => {
     } catch (error){
       console.error(error);
     }
+    try {
+      const challenges = await props.contract.getCommitCount(Typed.address(props.currentAddress));
+      setChallenges(parseInt(challenges));
+    } catch (error){
+      console.error(error);
+    }
   }
 
     return (
@@ -37,6 +45,7 @@ const InventoryComponent = (props) => {
             <p>Rock: {rock}</p>
             <p>Paper: {paper}</p>
             <p>Scissors: {scissors}</p>
+            <p>Challenges: {challenges}</p>
           </div>
         }
       </div>

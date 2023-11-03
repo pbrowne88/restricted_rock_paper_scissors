@@ -23,13 +23,11 @@ function GameInterface (props){
 
     useEffect(() => {
         const newContract = async () => {
-            if (currentAddress && currentAddressExists) {
+            if (currentAddress) {
                 const signer = await props.provider.getSigner(currentAddress.value);
-                props.setContract(new ethers.Contract('0x94BB080844AC1E043C3326c7f4785bFDdA8386A7', props.abi, signer))
-                console.log(props.contract);
+                props.setContract(new ethers.Contract(props.contractAddress, props.abi, signer));
             } else { 
-                props.setContract(new ethers.Contract('0x94BB080844AC1E043C3326c7f4785bFDdA8386A7', props.abi, props.provider))
-                console.log(props.contract);
+                props.setContract(new ethers.Contract(props.contractAddress, props.abi, props.provider));
             }
         };
 
@@ -63,10 +61,7 @@ function GameInterface (props){
 
     async function abandonGame(){
         try{
-            await props.contract.methods.leaveGame().send({
-            from: addressHandler(),
-            gas: 1000000,
-            });
+            await props.contract.leaveGame()
             setCurrentAddress(null);
             setOpponentPlayer(null);
             setAbandonAttempt(false);
@@ -82,11 +77,12 @@ function GameInterface (props){
             alert("You can't cash out while you have cards in your inventory.");
             return ;
         }
+        if (parseInt(inventory[0]) < 3){
+            alert("You can't cash out while you have fewer than three stars.")
+            return ; 
+        }
         try{
-            await props.contract.methods.cashOut().send({
-            from: addressHandler(),
-            gas: 1000000,
-            });
+            await props.contract.cashOut();
             setCurrentAddress(null);
             setOpponentPlayer(null);
         }
